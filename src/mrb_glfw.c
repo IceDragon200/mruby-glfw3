@@ -1,46 +1,63 @@
+#include <stdbool.h>
+
 #include <mruby.h>
-#include <mruby/array.h>
 #include <mruby/class.h>
-#include <mruby/data.h>
-#include <mruby/hash.h>
 #include <mruby/variable.h>
+#include <mruby/array.h>
+#include <mruby/error.h>
 
-#include <GLFW/glfw3.h>
-
-void
-free_window(mrb_state *mrb, void *ptr)
-{
-  if (ptr) {
-    glfwDestroyWindow((GLFWwindow*)ptr);
-  }
-}
-
-static mrb_data_type const window_type = { "GLFWwindow", free_window };
-
-static inline GLFWwindow*
-get_window(mrb_state *M, mrb_value self)
-{
-  return (GLFWwindow*)mrb_data_get_ptr(M, self, &window_type);
-}
-
-static mrb_value
-clipboard_get(mrb_state *M, mrb_value self)
-{
-  return mrb_str_new_cstr(M, glfwGetClipboardString(get_window(M, self)));
-}
-
-static mrb_value
-clipboard_set(mrb_state *M, mrb_value self)
-{
-  char* str;
-  mrb_get_args(M, "z", &str);
-  glfwSetClipboardString(get_window(M, self), str);
-  return mrb_str_new_cstr(M, str);
-}
+#include "glfw3_private.h"
+#include "glfw3_cursor.h"
+#include "glfw3_gamma_ramp.h"
+#include "glfw3_image.h"
+#include "glfw3_monitor.h"
+#include "glfw3_video_mode.h"
+#include "glfw3_window.h"
 
 static mrb_state *err_M = NULL;
+static struct RClass *glfw_err_class;
+static struct RClass *mrb_glfw3_module;
+
+static mrb_value
+glfw_init(mrb_state *mrb, mrb_value self)
+{
+  int err;
+  err = glfwInit();
+  if (err != GL_TRUE) {
+    mrb_raise(mrb, glfw_err_class, "GLFW initialization failed.");
+  }
+  return mrb_bool_value(true);
+}
+
 static void
-error_func(int code, char const* str)
+glfw_terminate_m(mrb_state *mrb)
+{
+  mrb_value objs = mrb_glfw3_cache(mrb);
+  for (mrb_int i = 0; i < RARRAY_LEN(objs); ++i) {
+    mrb_value const obj = RARRAY_PTR(objs)[i];
+    if (DATA_TYPE(obj) == &mrb_glfw3_window_type) {
+      if (DATA_PTR(obj)) {
+        glfwDestroyWindow((GLFWwindow*)DATA_PTR(obj));
+        DATA_PTR(obj) = NULL;
+        DATA_TYPE(obj) = NULL;
+      }
+    } else {
+      mrb_assert(false);
+    }
+  }
+  glfwTerminate();
+}
+
+static mrb_value
+glfw_terminate(mrb_state *mrb, mrb_value klass)
+{
+  glfw_terminate_m(mrb);
+  mrb_ary_clear(mrb, mrb_glfw3_cache(mrb));
+  return mrb_nil_value();
+}
+
+static void
+glfw_error_func(int code, char const* str)
 {
   if (err_M) {
     mrb_raisef(err_M, mrb_class_get(err_M, "GLFWError"), "%S: %S",
@@ -51,14 +68,18 @@ error_func(int code, char const* str)
 }
 
 static mrb_value
-current_context(mrb_state *M, mrb_value self)
+glfw_current_context(mrb_state *M, mrb_value self)
 {
   GLFWwindow * const cur = glfwGetCurrentContext();
-  return mrb_obj_value(glfwGetWindowUserPointer(cur));
+  if (cur) {
+    return mrb_obj_value(glfwGetWindowUserPointer(cur));
+  } else {
+    return mrb_nil_value();
+  }
 }
 
 static mrb_value
-swap_interval_set(mrb_state *M, mrb_value self)
+glfw_set_swap_interval(mrb_state *M, mrb_value self)
 {
   mrb_int v;
   mrb_get_args(M, "i", &v);
@@ -66,17 +87,17 @@ swap_interval_set(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-proc_address(mrb_state *M, mrb_value self)
+glfw_proc_address(mrb_state *mrb, mrb_value self)
 {
   /* TODO: figure out how to static assert nicely without C++ */
   /*static_assert(sizeof(void*) == sizeof(GLFWglproc), "function pointer and pointer size must be same");*/
   char *str;
-  mrb_get_args(M, "z", &str);
-  return mrb_cptr_value(M, (void*)glfwGetProcAddress(str));
+  mrb_get_args(mrb, "z", &str);
+  return mrb_cptr_value(mrb, (void*)glfwGetProcAddress(str));
 }
 
 static mrb_value
-extension_supported_p(mrb_state *M, mrb_value self)
+glfw_extension_supported_p(mrb_state *M, mrb_value self)
 {
   char *str;
   mrb_get_args(M, "z", &str);
@@ -84,19 +105,7 @@ extension_supported_p(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-make_current(mrb_state *M, mrb_value self)
-{
-  return glfwMakeContextCurrent(get_window(M, self)), self;
-}
-
-static mrb_value
-swap_buffers(mrb_state *M, mrb_value self)
-{
-  return glfwSwapBuffers(get_window(M, self)), self;
-}
-
-static mrb_value
-version(mrb_state *M, mrb_value self)
+glfw_version(mrb_state *M, mrb_value self)
 {
   int major, minor, rev;
   glfwGetVersion(&major, &minor, &rev);
@@ -105,241 +114,396 @@ version(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-version_string(mrb_state *M, mrb_value self)
+glfw_version_string(mrb_state *M, mrb_value self)
 {
   return mrb_str_new_cstr(M, glfwGetVersionString());
 }
 
 static mrb_value
-time_get(mrb_state *M, mrb_value self)
+glfw_get_time(mrb_state *M, mrb_value self)
 {
   return mrb_float_value(M, glfwGetTime());
 }
 
 static mrb_value
-time_set(mrb_state *M, mrb_value self)
+glfw_set_time(mrb_state *M, mrb_value self)
 {
   mrb_float v;
   mrb_get_args(M, "f", &v);
-  return glfwSetTime(v), mrb_float_value(M, v);
+  glfwSetTime(v);
+  return mrb_float_value(M, v);
 }
 
 static mrb_value
-window_initialize(mrb_state *M, mrb_value self)
+glfw_poll_events(mrb_state *M, mrb_value self)
 {
-  mrb_int w, h;
-  char *title;
-  mrb_value monitor = mrb_nil_value(), share = mrb_nil_value();
-  mrb_get_args(M, "iiz|oo", &w, &h, &title, &monitor, &share);
-  GLFWwindow *win = glfwCreateWindow(w, h, title, NULL, NULL);
-  DATA_PTR(self) = win;
-  DATA_TYPE(self) = &window_type;
-  glfwSetWindowUserPointer(win, mrb_obj_ptr(self));
-  mrb_ary_push(M, mrb_iv_get(M, mrb_obj_value(mrb_module_get(M, "GLFW")), mrb_intern_lit(M, "__glfw_objects")), self);
+  glfwPollEvents();
   return self;
 }
 
 static mrb_value
-should_close_p(mrb_state *M, mrb_value self)
+glfw_wait_events(mrb_state *M, mrb_value self)
 {
-  return mrb_bool_value(glfwWindowShouldClose(get_window(M, self)));
+  //glfwWaitEvents();
+  return self;
 }
 
 static mrb_value
-poll_events(mrb_state *M, mrb_value self)
+glfw_default_window_hints(mrb_state *M, mrb_value self)
 {
-  return glfwPollEvents(), self;
+  glfwDefaultWindowHints();
+  return self;
 }
 
 static mrb_value
-wait_events(mrb_state *M, mrb_value self)
-{
-  return glfwWaitEvents(), self;
-}
-
-static mrb_value
-window_size_get(mrb_state *M, mrb_value self)
-{
-  int w, h;
-  glfwGetWindowSize(get_window(M, self), &w, &h);
-  mrb_value const ret[] = { mrb_fixnum_value(w), mrb_fixnum_value(h) };
-  return mrb_ary_new_from_values(M, 2, ret);
-}
-
-static mrb_value
-window_size_set(mrb_state *M, mrb_value self)
-{
-  mrb_value ary;
-  mrb_get_args(M, "A", &ary);
-  glfwSetWindowSize(get_window(M, self),
-                    mrb_int(M, mrb_ary_entry(ary, 0)),
-                    mrb_int(M, mrb_ary_entry(ary, 1)));
-  return ary;
-}
-
-static mrb_value
-window_pos_get(mrb_state *M, mrb_value self)
-{
-  int w, h;
-  glfwGetWindowPos(get_window(M, self), &w, &h);
-  mrb_value const ret[] = { mrb_fixnum_value(w), mrb_fixnum_value(h) };
-  return mrb_ary_new_from_values(M, 2, ret);
-}
-
-static mrb_value
-window_pos_set(mrb_state *M, mrb_value self)
-{
-  mrb_value ary;
-  mrb_get_args(M, "A", &ary);
-  glfwSetWindowPos(get_window(M, self),
-                   mrb_int(M, mrb_ary_entry(ary, 0)),
-                   mrb_int(M, mrb_ary_entry(ary, 1)));
-  return ary;
-}
-
-static mrb_value
-default_window_hints(mrb_state *M, mrb_value self)
-{
-  return glfwDefaultWindowHints(), self;
-}
-
-static mrb_value
-window_hint(mrb_state *M, mrb_value self)
+glfw_window_hint(mrb_state *mrb, mrb_value self)
 {
   mrb_int target, hint;
-  mrb_get_args(M, "ii", &target, &hint);
-  return glfwWindowHint(target, hint), self;
+  mrb_get_args(mrb, "ii", &target, &hint);
+  glfwWindowHint(target, hint);
+  return self;
 }
 
 static mrb_value
-framebuffer_size(mrb_state *M, mrb_value self)
+glfw_post_empty_event(mrb_state *mrb, mrb_value self)
 {
-  int w, h;
-  glfwGetFramebufferSize(get_window(M, self), &w, &h);
-  mrb_value const ret[] = { mrb_fixnum_value(w), mrb_fixnum_value(h) };
-  return mrb_ary_new_from_values(M, 2, ret);
-}
-
-// Maybe we're using an outdated GLFW...
-#ifdef glfwGetWindowFrameSize
-static mrb_value
-window_frame_size(mrb_state *M, mrb_value self)
-{
-  int l, t, r, b;
-  glfwGetWindowFrameSize(get_window(M, self), &l, &t, &r, &b);
-  mrb_value const ret[] = { mrb_fixnum_value(l), mrb_fixnum_value(t),
-                            mrb_fixnum_value(r), mrb_fixnum_value(b) };
-  return mrb_ary_new_from_values(M, 4, ret);
-}
-#endif
-
-static mrb_value
-iconify(mrb_state *M, mrb_value self)
-{
-  return glfwIconifyWindow(get_window(M, self)), self;
+  glfwPostEmptyEvent();
+  return self;
 }
 
 static mrb_value
-restore(mrb_state *M, mrb_value self)
+glfw_joystick_present(mrb_state *mrb, mrb_value self)
 {
-  return glfwRestoreWindow(get_window(M, self)), self;
+  mrb_int joy;
+  mrb_get_args(mrb, "i", &joy);
+  return mrb_fixnum_value(glfwJoystickPresent(joy));
 }
 
 static mrb_value
-show(mrb_state *M, mrb_value self)
+glfw_joystick_axes(mrb_state *mrb, mrb_value self)
 {
-  return glfwShowWindow(get_window(M, self)), self;
+  mrb_int joy;
+  int count;
+  int i;
+  const float *axes;
+  mrb_value result;
+  mrb_get_args(mrb, "i", &joy);
+  axes = glfwGetJoystickAxes(joy, &count);
+  result = mrb_ary_new(mrb);
+  for (i = 0; i < count; ++i) {
+    mrb_ary_push(mrb, result, mrb_float_value(mrb, axes[i]));
+  }
+  return result;
 }
 
 static mrb_value
-hide(mrb_state *M, mrb_value self)
+glfw_joystick_buttons(mrb_state *mrb, mrb_value self)
 {
-  return glfwHideWindow(get_window(M, self)), self;
+  mrb_int joy;
+  int count;
+  int i;
+  const unsigned char *buttons;
+  mrb_value result;
+  mrb_get_args(mrb, "i", &joy);
+  buttons = glfwGetJoystickButtons(joy, &count);
+  result = mrb_ary_new(mrb);
+  for (i = 0; i < count; ++i) {
+    mrb_ary_push(mrb, result, mrb_fixnum_value(buttons[i]));
+  }
+  return result;
+}
+
+static mrb_value
+glfw_joystick_name(mrb_state *mrb, mrb_value self)
+{
+  mrb_int joy;
+  const char *name;
+  mrb_get_args(mrb, "i", &joy);
+  name = glfwGetJoystickName(joy);
+  return mrb_str_new_cstr(mrb, name);
+}
+
+static mrb_value
+glfw_cache_size(mrb_state *mrb, mrb_value self)
+{
+  return mrb_fixnum_value(RARRAY_LEN(mrb_glfw3_cache(mrb)));
 }
 
 void
-mrb_mruby_glfw3_gem_init(mrb_state* M)
+mrb_mruby_glfw3_gem_init(mrb_state* mrb)
 {
-  // mrb_assert(not err_M);
-  err_M = M;
-  glfwSetErrorCallback(&error_func);
-
-  struct RClass *const err_cls = mrb_define_class(M, "GLFWError", mrb_class_get(M, "StandardError"));
-
-  struct RClass *const mod = mrb_define_module(M, "GLFW");
-  mrb_iv_set(M, mrb_obj_value(mod), mrb_intern_lit(M, "__glfw_objects"), mrb_ary_new(M));
-
-  mrb_define_class_method(M, mod, "current_context",      current_context,       MRB_ARGS_NONE());
-  mrb_define_class_method(M, mod, "swap_interval=",       swap_interval_set,     MRB_ARGS_REQ(1));
-  mrb_define_class_method(M, mod, "extension_supported?", extension_supported_p, MRB_ARGS_REQ(1));
-  mrb_define_class_method(M, mod, "proc_address",         proc_address,          MRB_ARGS_REQ(1));
-  mrb_define_class_method(M, mod, "version",              version,               MRB_ARGS_NONE());
-  mrb_define_class_method(M, mod, "version_string",       version_string,        MRB_ARGS_NONE());
-  mrb_define_class_method(M, mod, "time",                 time_get,              MRB_ARGS_NONE());
-  mrb_define_class_method(M, mod, "time=",                time_set,              MRB_ARGS_REQ(1));
-  mrb_define_class_method(M, mod, "poll_events",          poll_events,           MRB_ARGS_NONE());
-  mrb_define_class_method(M, mod, "wait_events",          wait_events,           MRB_ARGS_NONE());
-  mrb_define_class_method(M, mod, "default_window_hints", default_window_hints,  MRB_ARGS_NONE());
-  mrb_define_class_method(M, mod, "window_hint",          window_hint,           MRB_ARGS_REQ(2));
-
-  /*
-  mrb_define_class_method(M, mod, "monitors", monitors, MRB_ARGS_NONE());
-  mrb_define_class_method(M, mod, "primary_moniter", primary_moniter, MRB_ARGS_NONE());
-  mrb_define_class_method(M, mod, "set_monitor_callback", set_monitor_callback, MRB_ARGS_BLOCK());
-
-  RClass *const monitor = mrb_define_class_under(M, mod, "Monitor", M->object_class);
-  mrb_define_method(M, monitor, "position", position, MRB_ARGS_NONE());
-  mrb_define_method(M, monitor, "physical_size", physical_size, MRB_ARGS_NONE());
-  mrb_define_method(M, monitor, "name", monitor_name, MRB_ARGS_NONE());
-  mrb_define_method(M, monitor, "video_modes", video_modes, MRB_ARGS_NONE());
-  mrb_define_method(M, monitor, "vidoe_mode", video_mode, MRB_ARGS_NONE());
-  mrb_define_method(M, monitor, "gamma=", gamma_set, MRB_ARGS_REQ(1));
-  mrb_define_method(M, monitor, "gamma_ramp", gamma_ramp_get, MRB_ARGS_NONE());
-  mrb_define_method(M, monitor, "gamma_ramp=", gamma_ramp_set, MRB_ARGS_REQ(1));
-  */
-
-  struct RClass *const win = mrb_define_class_under(M, mod, "Window", M->object_class);
-  MRB_SET_INSTANCE_TT(win, MRB_TT_DATA);
-  mrb_define_method(M, win, "initialize",        window_initialize, MRB_ARGS_REQ(3) | MRB_ARGS_OPT(2));
-  mrb_define_method(M, win, "clipboard",         clipboard_get,     MRB_ARGS_NONE());
-  mrb_define_method(M, win, "clipboard=",        clipboard_set,     MRB_ARGS_REQ(1));
-  mrb_define_method(M, win, "make_current",      make_current,      MRB_ARGS_NONE());
-  mrb_define_method(M, win, "swap_buffers",      swap_buffers,      MRB_ARGS_NONE());
-  mrb_define_method(M, win, "should_close?",     should_close_p,    MRB_ARGS_NONE());
-  mrb_define_method(M, win, "window_size",       window_size_get,   MRB_ARGS_NONE());
-  mrb_define_method(M, win, "window_size=",      window_size_set,   MRB_ARGS_REQ(2));
-  mrb_define_method(M, win, "window_pos",        window_pos_get,    MRB_ARGS_NONE());
-  mrb_define_method(M, win, "window_pos=",       window_pos_set,    MRB_ARGS_REQ(2));
-  mrb_define_method(M, win, "framebuffer_size",  framebuffer_size,  MRB_ARGS_NONE());
-#ifdef window_frame_size
-  mrb_define_method(M, win, "window_frame_size", window_frame_size, MRB_ARGS_NONE());
-#endif
-  mrb_define_method(M, win, "iconify",           iconify,           MRB_ARGS_NONE());
-  mrb_define_method(M, win, "restore",           restore,           MRB_ARGS_NONE());
-  mrb_define_method(M, win, "show",              show,              MRB_ARGS_NONE());
-  mrb_define_method(M, win, "hide",              hide,              MRB_ARGS_NONE());
-
-  int err = glfwInit();
-  if (err != GL_TRUE) {
-    mrb_raise(M, err_cls, "GLFW initialization failed.");
-  }
+  /* Setup error callbacks */
+  err_M = mrb;
+  glfwSetErrorCallback(&glfw_error_func);
+  glfw_err_class = mrb_define_class(mrb, "GLFWError", mrb_class_get(mrb, "StandardError"));
+  /* GLFW module */
+  mrb_glfw3_module = mrb_define_module(mrb, "GLFW");
+  /* Cache */
+  mrb_iv_set(mrb, mrb_obj_value(mrb_glfw3_module), mrb_intern_lit(mrb, "__glfw_objects"), mrb_ary_new(mrb));
+  /* module methods */
+  mrb_define_class_method(mrb, mrb_glfw3_module, "init",                 glfw_init,                  MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb_glfw3_module, "terminate",            glfw_terminate,             MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb_glfw3_module, "version",              glfw_version,               MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb_glfw3_module, "version_string",       glfw_version_string,        MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb_glfw3_module, "default_window_hints", glfw_default_window_hints,  MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb_glfw3_module, "window_hint",          glfw_window_hint,           MRB_ARGS_REQ(2));
+  mrb_define_class_method(mrb, mrb_glfw3_module, "poll_events",          glfw_poll_events,           MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb_glfw3_module, "wait_events",          glfw_wait_events,           MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb_glfw3_module, "post_empty_event",     glfw_post_empty_event,      MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb_glfw3_module, "time",                 glfw_get_time,              MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb_glfw3_module, "time=",                glfw_set_time,              MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, mrb_glfw3_module, "current_context",      glfw_current_context,       MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb_glfw3_module, "swap_interval=",       glfw_set_swap_interval,     MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, mrb_glfw3_module, "extension_supported?", glfw_extension_supported_p, MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, mrb_glfw3_module, "proc_address",         glfw_proc_address,          MRB_ARGS_REQ(1));
+  /* Joystick */
+  mrb_define_class_method(mrb, mrb_glfw3_module, "joystick_present",     glfw_joystick_present,      MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, mrb_glfw3_module, "joystick_axes",        glfw_joystick_axes,         MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, mrb_glfw3_module, "joystick_buttons",     glfw_joystick_buttons,      MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, mrb_glfw3_module, "joystick_name",        glfw_joystick_name,         MRB_ARGS_REQ(1));
+  /* internal cache */
+  mrb_define_class_method(mrb, mrb_glfw3_module, "cache_size", glfw_cache_size, MRB_ARGS_NONE());
+  /* Constants */
+  mrb_define_const(mrb, mrb_glfw3_module, "VERSION_MAJOR", mrb_fixnum_value(GLFW_VERSION_MAJOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "VERSION_MINOR", mrb_fixnum_value(GLFW_VERSION_MINOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "VERSION_REVISION", mrb_fixnum_value(GLFW_VERSION_REVISION));
+  mrb_define_const(mrb, mrb_glfw3_module, "RELEASE", mrb_fixnum_value(GLFW_RELEASE));
+  mrb_define_const(mrb, mrb_glfw3_module, "PRESS", mrb_fixnum_value(GLFW_PRESS));
+  mrb_define_const(mrb, mrb_glfw3_module, "REPEAT", mrb_fixnum_value(GLFW_REPEAT));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_UNKNOWN", mrb_fixnum_value(GLFW_KEY_UNKNOWN));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_SPACE", mrb_fixnum_value(GLFW_KEY_SPACE));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_APOSTROPHE", mrb_fixnum_value(GLFW_KEY_APOSTROPHE));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_COMMA", mrb_fixnum_value(GLFW_KEY_COMMA));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_MINUS", mrb_fixnum_value(GLFW_KEY_MINUS));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_PERIOD", mrb_fixnum_value(GLFW_KEY_PERIOD));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_SLASH", mrb_fixnum_value(GLFW_KEY_SLASH));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_0", mrb_fixnum_value(GLFW_KEY_0));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_1", mrb_fixnum_value(GLFW_KEY_1));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_2", mrb_fixnum_value(GLFW_KEY_2));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_3", mrb_fixnum_value(GLFW_KEY_3));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_4", mrb_fixnum_value(GLFW_KEY_4));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_5", mrb_fixnum_value(GLFW_KEY_5));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_6", mrb_fixnum_value(GLFW_KEY_6));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_7", mrb_fixnum_value(GLFW_KEY_7));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_8", mrb_fixnum_value(GLFW_KEY_8));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_9", mrb_fixnum_value(GLFW_KEY_9));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_SEMICOLON", mrb_fixnum_value(GLFW_KEY_SEMICOLON));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_EQUAL", mrb_fixnum_value(GLFW_KEY_EQUAL));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_A", mrb_fixnum_value(GLFW_KEY_A));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_B", mrb_fixnum_value(GLFW_KEY_B));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_C", mrb_fixnum_value(GLFW_KEY_C));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_D", mrb_fixnum_value(GLFW_KEY_D));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_E", mrb_fixnum_value(GLFW_KEY_E));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F", mrb_fixnum_value(GLFW_KEY_F));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_G", mrb_fixnum_value(GLFW_KEY_G));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_H", mrb_fixnum_value(GLFW_KEY_H));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_I", mrb_fixnum_value(GLFW_KEY_I));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_J", mrb_fixnum_value(GLFW_KEY_J));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_K", mrb_fixnum_value(GLFW_KEY_K));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_L", mrb_fixnum_value(GLFW_KEY_L));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_M", mrb_fixnum_value(GLFW_KEY_M));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_N", mrb_fixnum_value(GLFW_KEY_N));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_O", mrb_fixnum_value(GLFW_KEY_O));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_P", mrb_fixnum_value(GLFW_KEY_P));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_Q", mrb_fixnum_value(GLFW_KEY_Q));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_R", mrb_fixnum_value(GLFW_KEY_R));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_S", mrb_fixnum_value(GLFW_KEY_S));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_T", mrb_fixnum_value(GLFW_KEY_T));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_U", mrb_fixnum_value(GLFW_KEY_U));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_V", mrb_fixnum_value(GLFW_KEY_V));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_W", mrb_fixnum_value(GLFW_KEY_W));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_X", mrb_fixnum_value(GLFW_KEY_X));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_Y", mrb_fixnum_value(GLFW_KEY_Y));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_Z", mrb_fixnum_value(GLFW_KEY_Z));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_LEFT_BRACKET", mrb_fixnum_value(GLFW_KEY_LEFT_BRACKET));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_BACKSLASH", mrb_fixnum_value(GLFW_KEY_BACKSLASH));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_RIGHT_BRACKET", mrb_fixnum_value(GLFW_KEY_RIGHT_BRACKET));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_GRAVE_ACCENT", mrb_fixnum_value(GLFW_KEY_GRAVE_ACCENT));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_WORLD_1", mrb_fixnum_value(GLFW_KEY_WORLD_1));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_WORLD_2", mrb_fixnum_value(GLFW_KEY_WORLD_2));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_ESCAPE", mrb_fixnum_value(GLFW_KEY_ESCAPE));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_ENTER", mrb_fixnum_value(GLFW_KEY_ENTER));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_TAB", mrb_fixnum_value(GLFW_KEY_TAB));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_BACKSPACE", mrb_fixnum_value(GLFW_KEY_BACKSPACE));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_INSERT", mrb_fixnum_value(GLFW_KEY_INSERT));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_DELETE", mrb_fixnum_value(GLFW_KEY_DELETE));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_RIGHT", mrb_fixnum_value(GLFW_KEY_RIGHT));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_LEFT", mrb_fixnum_value(GLFW_KEY_LEFT));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_DOWN", mrb_fixnum_value(GLFW_KEY_DOWN));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_UP", mrb_fixnum_value(GLFW_KEY_UP));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_PAGE_UP", mrb_fixnum_value(GLFW_KEY_PAGE_UP));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_PAGE_DOWN", mrb_fixnum_value(GLFW_KEY_PAGE_DOWN));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_HOME", mrb_fixnum_value(GLFW_KEY_HOME));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_END", mrb_fixnum_value(GLFW_KEY_END));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_CAPS_LOCK", mrb_fixnum_value(GLFW_KEY_CAPS_LOCK));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_SCROLL_LOCK", mrb_fixnum_value(GLFW_KEY_SCROLL_LOCK));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_NUM_LOCK", mrb_fixnum_value(GLFW_KEY_NUM_LOCK));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_PRINT_SCREEN", mrb_fixnum_value(GLFW_KEY_PRINT_SCREEN));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_PAUSE", mrb_fixnum_value(GLFW_KEY_PAUSE));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F1", mrb_fixnum_value(GLFW_KEY_F1));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F2", mrb_fixnum_value(GLFW_KEY_F2));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F3", mrb_fixnum_value(GLFW_KEY_F3));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F4", mrb_fixnum_value(GLFW_KEY_F4));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F5", mrb_fixnum_value(GLFW_KEY_F5));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F6", mrb_fixnum_value(GLFW_KEY_F6));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F7", mrb_fixnum_value(GLFW_KEY_F7));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F8", mrb_fixnum_value(GLFW_KEY_F8));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F9", mrb_fixnum_value(GLFW_KEY_F9));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F10", mrb_fixnum_value(GLFW_KEY_F10));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F11", mrb_fixnum_value(GLFW_KEY_F11));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F12", mrb_fixnum_value(GLFW_KEY_F12));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F13", mrb_fixnum_value(GLFW_KEY_F13));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F14", mrb_fixnum_value(GLFW_KEY_F14));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F15", mrb_fixnum_value(GLFW_KEY_F15));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F16", mrb_fixnum_value(GLFW_KEY_F16));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F17", mrb_fixnum_value(GLFW_KEY_F17));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F18", mrb_fixnum_value(GLFW_KEY_F18));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F19", mrb_fixnum_value(GLFW_KEY_F19));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F20", mrb_fixnum_value(GLFW_KEY_F20));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F21", mrb_fixnum_value(GLFW_KEY_F21));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F22", mrb_fixnum_value(GLFW_KEY_F22));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F23", mrb_fixnum_value(GLFW_KEY_F23));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F24", mrb_fixnum_value(GLFW_KEY_F24));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_F25", mrb_fixnum_value(GLFW_KEY_F25));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_0", mrb_fixnum_value(GLFW_KEY_KP_0));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_1", mrb_fixnum_value(GLFW_KEY_KP_1));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_2", mrb_fixnum_value(GLFW_KEY_KP_2));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_3", mrb_fixnum_value(GLFW_KEY_KP_3));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_4", mrb_fixnum_value(GLFW_KEY_KP_4));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_5", mrb_fixnum_value(GLFW_KEY_KP_5));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_6", mrb_fixnum_value(GLFW_KEY_KP_6));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_7", mrb_fixnum_value(GLFW_KEY_KP_7));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_8", mrb_fixnum_value(GLFW_KEY_KP_8));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_9", mrb_fixnum_value(GLFW_KEY_KP_9));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_DECIMAL", mrb_fixnum_value(GLFW_KEY_KP_DECIMAL));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_DIVIDE", mrb_fixnum_value(GLFW_KEY_KP_DIVIDE));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_MULTIPLY", mrb_fixnum_value(GLFW_KEY_KP_MULTIPLY));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_SUBTRACT", mrb_fixnum_value(GLFW_KEY_KP_SUBTRACT));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_ADD", mrb_fixnum_value(GLFW_KEY_KP_ADD));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_ENTER", mrb_fixnum_value(GLFW_KEY_KP_ENTER));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_KP_EQUAL", mrb_fixnum_value(GLFW_KEY_KP_EQUAL));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_LEFT_SHIFT", mrb_fixnum_value(GLFW_KEY_LEFT_SHIFT));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_LEFT_CONTROL", mrb_fixnum_value(GLFW_KEY_LEFT_CONTROL));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_LEFT_ALT", mrb_fixnum_value(GLFW_KEY_LEFT_ALT));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_LEFT_SUPER", mrb_fixnum_value(GLFW_KEY_LEFT_SUPER));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_RIGHT_SHIFT", mrb_fixnum_value(GLFW_KEY_RIGHT_SHIFT));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_RIGHT_CONTROL", mrb_fixnum_value(GLFW_KEY_RIGHT_CONTROL));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_RIGHT_ALT", mrb_fixnum_value(GLFW_KEY_RIGHT_ALT));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_RIGHT_SUPER", mrb_fixnum_value(GLFW_KEY_RIGHT_SUPER));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_MENU", mrb_fixnum_value(GLFW_KEY_MENU));
+  mrb_define_const(mrb, mrb_glfw3_module, "KEY_LAST", mrb_fixnum_value(GLFW_KEY_LAST));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOD_SHIFT", mrb_fixnum_value(GLFW_MOD_SHIFT));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOD_CONTROL", mrb_fixnum_value(GLFW_MOD_CONTROL));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOD_ALT", mrb_fixnum_value(GLFW_MOD_ALT));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOD_SUPER", mrb_fixnum_value(GLFW_MOD_SUPER));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_1", mrb_fixnum_value(GLFW_MOUSE_BUTTON_1));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_2", mrb_fixnum_value(GLFW_MOUSE_BUTTON_2));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_3", mrb_fixnum_value(GLFW_MOUSE_BUTTON_3));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_4", mrb_fixnum_value(GLFW_MOUSE_BUTTON_4));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_5", mrb_fixnum_value(GLFW_MOUSE_BUTTON_5));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_6", mrb_fixnum_value(GLFW_MOUSE_BUTTON_6));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_7", mrb_fixnum_value(GLFW_MOUSE_BUTTON_7));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_8", mrb_fixnum_value(GLFW_MOUSE_BUTTON_8));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_LAST", mrb_fixnum_value(GLFW_MOUSE_BUTTON_LAST));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_LEFT", mrb_fixnum_value(GLFW_MOUSE_BUTTON_LEFT));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_RIGHT", mrb_fixnum_value(GLFW_MOUSE_BUTTON_RIGHT));
+  mrb_define_const(mrb, mrb_glfw3_module, "MOUSE_BUTTON_MIDDLE", mrb_fixnum_value(GLFW_MOUSE_BUTTON_MIDDLE));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_1", mrb_fixnum_value(GLFW_JOYSTICK_1));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_2", mrb_fixnum_value(GLFW_JOYSTICK_2));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_3", mrb_fixnum_value(GLFW_JOYSTICK_3));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_4", mrb_fixnum_value(GLFW_JOYSTICK_4));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_5", mrb_fixnum_value(GLFW_JOYSTICK_5));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_6", mrb_fixnum_value(GLFW_JOYSTICK_6));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_7", mrb_fixnum_value(GLFW_JOYSTICK_7));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_8", mrb_fixnum_value(GLFW_JOYSTICK_8));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_9", mrb_fixnum_value(GLFW_JOYSTICK_9));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_10", mrb_fixnum_value(GLFW_JOYSTICK_10));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_11", mrb_fixnum_value(GLFW_JOYSTICK_11));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_12", mrb_fixnum_value(GLFW_JOYSTICK_12));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_13", mrb_fixnum_value(GLFW_JOYSTICK_13));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_14", mrb_fixnum_value(GLFW_JOYSTICK_14));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_15", mrb_fixnum_value(GLFW_JOYSTICK_15));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_16", mrb_fixnum_value(GLFW_JOYSTICK_16));
+  mrb_define_const(mrb, mrb_glfw3_module, "JOYSTICK_LAST", mrb_fixnum_value(GLFW_JOYSTICK_LAST));
+  mrb_define_const(mrb, mrb_glfw3_module, "NOT_INITIALIZED", mrb_fixnum_value(GLFW_NOT_INITIALIZED));
+  mrb_define_const(mrb, mrb_glfw3_module, "NO_CURRENT_CONTEXT", mrb_fixnum_value(GLFW_NO_CURRENT_CONTEXT));
+  mrb_define_const(mrb, mrb_glfw3_module, "INVALID_ENUM", mrb_fixnum_value(GLFW_INVALID_ENUM));
+  mrb_define_const(mrb, mrb_glfw3_module, "INVALID_VALUE", mrb_fixnum_value(GLFW_INVALID_VALUE));
+  mrb_define_const(mrb, mrb_glfw3_module, "OUT_OF_MEMORY", mrb_fixnum_value(GLFW_OUT_OF_MEMORY));
+  mrb_define_const(mrb, mrb_glfw3_module, "API_UNAVAILABLE", mrb_fixnum_value(GLFW_API_UNAVAILABLE));
+  mrb_define_const(mrb, mrb_glfw3_module, "VERSION_UNAVAILABLE", mrb_fixnum_value(GLFW_VERSION_UNAVAILABLE));
+  mrb_define_const(mrb, mrb_glfw3_module, "PLATFORM_ERROR", mrb_fixnum_value(GLFW_PLATFORM_ERROR));
+  mrb_define_const(mrb, mrb_glfw3_module, "FORMAT_UNAVAILABLE", mrb_fixnum_value(GLFW_FORMAT_UNAVAILABLE));
+  mrb_define_const(mrb, mrb_glfw3_module, "FOCUSED", mrb_fixnum_value(GLFW_FOCUSED));
+  mrb_define_const(mrb, mrb_glfw3_module, "ICONIFIED", mrb_fixnum_value(GLFW_ICONIFIED));
+  mrb_define_const(mrb, mrb_glfw3_module, "RESIZABLE", mrb_fixnum_value(GLFW_RESIZABLE));
+  mrb_define_const(mrb, mrb_glfw3_module, "VISIBLE", mrb_fixnum_value(GLFW_VISIBLE));
+  mrb_define_const(mrb, mrb_glfw3_module, "DECORATED", mrb_fixnum_value(GLFW_DECORATED));
+  mrb_define_const(mrb, mrb_glfw3_module, "AUTO_ICONIFY", mrb_fixnum_value(GLFW_AUTO_ICONIFY));
+  mrb_define_const(mrb, mrb_glfw3_module, "FLOATING", mrb_fixnum_value(GLFW_FLOATING));
+  mrb_define_const(mrb, mrb_glfw3_module, "RED_BITS", mrb_fixnum_value(GLFW_RED_BITS));
+  mrb_define_const(mrb, mrb_glfw3_module, "GREEN_BITS", mrb_fixnum_value(GLFW_GREEN_BITS));
+  mrb_define_const(mrb, mrb_glfw3_module, "BLUE_BITS", mrb_fixnum_value(GLFW_BLUE_BITS));
+  mrb_define_const(mrb, mrb_glfw3_module, "ALPHA_BITS", mrb_fixnum_value(GLFW_ALPHA_BITS));
+  mrb_define_const(mrb, mrb_glfw3_module, "DEPTH_BITS", mrb_fixnum_value(GLFW_DEPTH_BITS));
+  mrb_define_const(mrb, mrb_glfw3_module, "STENCIL_BITS", mrb_fixnum_value(GLFW_STENCIL_BITS));
+  mrb_define_const(mrb, mrb_glfw3_module, "ACCUM_RED_BITS", mrb_fixnum_value(GLFW_ACCUM_RED_BITS));
+  mrb_define_const(mrb, mrb_glfw3_module, "ACCUM_GREEN_BITS", mrb_fixnum_value(GLFW_ACCUM_GREEN_BITS));
+  mrb_define_const(mrb, mrb_glfw3_module, "ACCUM_BLUE_BITS", mrb_fixnum_value(GLFW_ACCUM_BLUE_BITS));
+  mrb_define_const(mrb, mrb_glfw3_module, "ACCUM_ALPHA_BITS", mrb_fixnum_value(GLFW_ACCUM_ALPHA_BITS));
+  mrb_define_const(mrb, mrb_glfw3_module, "AUX_BUFFERS", mrb_fixnum_value(GLFW_AUX_BUFFERS));
+  mrb_define_const(mrb, mrb_glfw3_module, "STEREO", mrb_fixnum_value(GLFW_STEREO));
+  mrb_define_const(mrb, mrb_glfw3_module, "SAMPLES", mrb_fixnum_value(GLFW_SAMPLES));
+  mrb_define_const(mrb, mrb_glfw3_module, "SRGB_CAPABLE", mrb_fixnum_value(GLFW_SRGB_CAPABLE));
+  mrb_define_const(mrb, mrb_glfw3_module, "REFRESH_RATE", mrb_fixnum_value(GLFW_REFRESH_RATE));
+  mrb_define_const(mrb, mrb_glfw3_module, "DOUBLEBUFFER", mrb_fixnum_value(GLFW_DOUBLEBUFFER));
+  mrb_define_const(mrb, mrb_glfw3_module, "CLIENT_API", mrb_fixnum_value(GLFW_CLIENT_API));
+  mrb_define_const(mrb, mrb_glfw3_module, "CONTEXT_VERSION_MAJOR", mrb_fixnum_value(GLFW_CONTEXT_VERSION_MAJOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "CONTEXT_VERSION_MINOR", mrb_fixnum_value(GLFW_CONTEXT_VERSION_MINOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "CONTEXT_REVISION", mrb_fixnum_value(GLFW_CONTEXT_REVISION));
+  mrb_define_const(mrb, mrb_glfw3_module, "CONTEXT_ROBUSTNESS", mrb_fixnum_value(GLFW_CONTEXT_ROBUSTNESS));
+  mrb_define_const(mrb, mrb_glfw3_module, "OPENGL_FORWARD_COMPAT", mrb_fixnum_value(GLFW_OPENGL_FORWARD_COMPAT));
+  mrb_define_const(mrb, mrb_glfw3_module, "OPENGL_DEBUG_CONTEXT", mrb_fixnum_value(GLFW_OPENGL_DEBUG_CONTEXT));
+  mrb_define_const(mrb, mrb_glfw3_module, "OPENGL_PROFILE", mrb_fixnum_value(GLFW_OPENGL_PROFILE));
+  mrb_define_const(mrb, mrb_glfw3_module, "CONTEXT_RELEASE_BEHAVIOR", mrb_fixnum_value(GLFW_CONTEXT_RELEASE_BEHAVIOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "OPENGL_API", mrb_fixnum_value(GLFW_OPENGL_API));
+  mrb_define_const(mrb, mrb_glfw3_module, "OPENGL_ES_API", mrb_fixnum_value(GLFW_OPENGL_ES_API));
+  mrb_define_const(mrb, mrb_glfw3_module, "NO_ROBUSTNESS", mrb_fixnum_value(GLFW_NO_ROBUSTNESS));
+  mrb_define_const(mrb, mrb_glfw3_module, "NO_RESET_NOTIFICATION", mrb_fixnum_value(GLFW_NO_RESET_NOTIFICATION));
+  mrb_define_const(mrb, mrb_glfw3_module, "LOSE_CONTEXT_ON_RESET", mrb_fixnum_value(GLFW_LOSE_CONTEXT_ON_RESET));
+  mrb_define_const(mrb, mrb_glfw3_module, "OPENGL_ANY_PROFILE", mrb_fixnum_value(GLFW_OPENGL_ANY_PROFILE));
+  mrb_define_const(mrb, mrb_glfw3_module, "OPENGL_CORE_PROFILE", mrb_fixnum_value(GLFW_OPENGL_CORE_PROFILE));
+  mrb_define_const(mrb, mrb_glfw3_module, "OPENGL_COMPAT_PROFILE", mrb_fixnum_value(GLFW_OPENGL_COMPAT_PROFILE));
+  mrb_define_const(mrb, mrb_glfw3_module, "CURSOR", mrb_fixnum_value(GLFW_CURSOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "STICKY_KEYS", mrb_fixnum_value(GLFW_STICKY_KEYS));
+  mrb_define_const(mrb, mrb_glfw3_module, "STICKY_MOUSE_BUTTONS", mrb_fixnum_value(GLFW_STICKY_MOUSE_BUTTONS));
+  mrb_define_const(mrb, mrb_glfw3_module, "CURSOR_NORMAL", mrb_fixnum_value(GLFW_CURSOR_NORMAL));
+  mrb_define_const(mrb, mrb_glfw3_module, "CURSOR_HIDDEN", mrb_fixnum_value(GLFW_CURSOR_HIDDEN));
+  mrb_define_const(mrb, mrb_glfw3_module, "CURSOR_DISABLED", mrb_fixnum_value(GLFW_CURSOR_DISABLED));
+  mrb_define_const(mrb, mrb_glfw3_module, "ANY_RELEASE_BEHAVIOR", mrb_fixnum_value(GLFW_ANY_RELEASE_BEHAVIOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "RELEASE_BEHAVIOR_FLUSH", mrb_fixnum_value(GLFW_RELEASE_BEHAVIOR_FLUSH));
+  mrb_define_const(mrb, mrb_glfw3_module, "RELEASE_BEHAVIOR_NONE", mrb_fixnum_value(GLFW_RELEASE_BEHAVIOR_NONE));
+  mrb_define_const(mrb, mrb_glfw3_module, "ARROW_CURSOR", mrb_fixnum_value(GLFW_ARROW_CURSOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "IBEAM_CURSOR", mrb_fixnum_value(GLFW_IBEAM_CURSOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "CROSSHAIR_CURSOR", mrb_fixnum_value(GLFW_CROSSHAIR_CURSOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "HAND_CURSOR", mrb_fixnum_value(GLFW_HAND_CURSOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "HRESIZE_CURSOR", mrb_fixnum_value(GLFW_HRESIZE_CURSOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "VRESIZE_CURSOR", mrb_fixnum_value(GLFW_VRESIZE_CURSOR));
+  mrb_define_const(mrb, mrb_glfw3_module, "CONNECTED", mrb_fixnum_value(GLFW_CONNECTED));
+  mrb_define_const(mrb, mrb_glfw3_module, "DISCONNECTED", mrb_fixnum_value(GLFW_DISCONNECTED));
+  mrb_define_const(mrb, mrb_glfw3_module, "DONT_CARE", mrb_fixnum_value(GLFW_DONT_CARE));
+  /* sub-modules */
+  mrb_glfw3_video_mode_init(mrb, mrb_glfw3_module);
+  mrb_glfw3_gamma_ramp_init(mrb, mrb_glfw3_module);
+  mrb_glfw3_image_init(mrb, mrb_glfw3_module);
+  mrb_glfw3_cursor_init(mrb, mrb_glfw3_module);
+  mrb_glfw3_monitor_init(mrb, mrb_glfw3_module);
+  mrb_glfw3_window_init(mrb, mrb_glfw3_module);
 }
 
 void
-mrb_mruby_glfw3_gem_final(mrb_state *M)
+mrb_mruby_glfw3_gem_final(mrb_state *mrb)
 {
-  mrb_value glfw_module = mrb_obj_value(mrb_module_get(M, "GLFW"));
-  mrb_value objs = mrb_iv_get(M, glfw_module, mrb_intern_lit(M, "__glfw_objects"));
-  for (mrb_int i = 0; i < RARRAY_LEN(objs); ++i) {
-    mrb_value const obj = RARRAY_PTR(objs)[i];
-    if (DATA_TYPE(obj) == &window_type) {
-      glfwDestroyWindow((GLFWwindow*)DATA_PTR(obj));
-      DATA_PTR(obj) = NULL;
-    } else {
-      mrb_assert(false);
-    }
-  }
-
+  glfw_terminate_m(mrb);
   err_M = NULL;
-  glfwTerminate();
 }
