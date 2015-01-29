@@ -1,4 +1,4 @@
-__END__
+=begin
 $mrbtest_verbose = true
 
 GLFW.init
@@ -68,3 +68,4 @@ if monitor
     true
   end
 end
+=end

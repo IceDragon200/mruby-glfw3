@@ -1,4 +1,3 @@
-__END__
 =begin
 $mrbtest_verbose = true
 

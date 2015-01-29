@@ -1,4 +1,4 @@
-__END__
+=begin
 $mrbtest_verbose = true
 
 GLFW.init
@@ -35,3 +35,4 @@ if monitor
     assert_kind_of(Integer, video_mode.refresh_rate)
   end
 end
+=end
