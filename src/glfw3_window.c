@@ -135,17 +135,21 @@ get_window(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-window_initialize(mrb_state *M, mrb_value self)
+window_initialize(mrb_state *mrb, mrb_value self)
 {
   mrb_int w, h;
   char *title;
+  GLFWwindow *win;
   mrb_value monitor = mrb_nil_value(), share = mrb_nil_value();
-  mrb_get_args(M, "iiz|oo", &w, &h, &title, &monitor, &share);
-  GLFWwindow *win = glfwCreateWindow(w, h, title, NULL, NULL);
+  mrb_get_args(mrb, "iiz|oo", &w, &h, &title, &monitor, &share);
+  win = glfwCreateWindow(w, h, title, NULL, NULL);
+  if (!win) {
+    mrb_raise(mrb, E_GLFW_ERROR, "Could not create Window.");
+  }
   DATA_PTR(self) = win;
   DATA_TYPE(self) = &mrb_glfw3_window_type;
   glfwSetWindowUserPointer(win, mrb_obj_ptr(self));
-  mrb_glfw3_cache_object(M, self);
+  mrb_glfw3_cache_object(mrb, self);
   return self;
 }
 
@@ -214,8 +218,10 @@ static mrb_value
 window_size_get(mrb_state *M, mrb_value self)
 {
   int w, h;
+  mrb_value ret[2];
   glfwGetWindowSize(get_window(M, self), &w, &h);
-  mrb_value const ret[] = { mrb_fixnum_value(w), mrb_fixnum_value(h) };
+  ret[0] = mrb_fixnum_value(w);
+  ret[1] = mrb_fixnum_value(h);
   return mrb_ary_new_from_values(M, 2, ret);
 }
 
@@ -234,8 +240,10 @@ static mrb_value
 window_pos_get(mrb_state *M, mrb_value self)
 {
   int w, h;
+  mrb_value ret[2];
   glfwGetWindowPos(get_window(M, self), &w, &h);
-  mrb_value const ret[] = { mrb_fixnum_value(w), mrb_fixnum_value(h) };
+  ret[0] = mrb_fixnum_value(w);
+  ret[1] = mrb_fixnum_value(h);
   return mrb_ary_new_from_values(M, 2, ret);
 }
 
@@ -251,27 +259,49 @@ window_pos_set(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
+window_cursor_pos_get(mrb_state *mrb, mrb_value self)
+{
+  double x, y;
+  mrb_value ret[2];
+  glfwGetCursorPos(get_window(mrb, self), &x, &y);
+  ret[0] = mrb_float_value(mrb, x);
+  ret[1] = mrb_float_value(mrb, y);
+  return mrb_ary_new_from_values(mrb, 2, ret);
+}
+
+static mrb_value
+window_cursor_pos_set(mrb_state *M, mrb_value self)
+{
+  mrb_value ary;
+  mrb_get_args(M, "A", &ary);
+  glfwSetWindowPos(get_window(M, self),
+                   mrb_float(mrb_ary_entry(ary, 0)),
+                   mrb_float(mrb_ary_entry(ary, 1)));
+  return ary;
+}
+
+static mrb_value
 window_framebuffer_size(mrb_state *M, mrb_value self)
 {
   int w, h;
+  mrb_value ret[2];
   glfwGetFramebufferSize(get_window(M, self), &w, &h);
-  mrb_value const ret[] = { mrb_fixnum_value(w), mrb_fixnum_value(h) };
+  ret[0] = mrb_fixnum_value(w);
+  ret[1] = mrb_fixnum_value(h);
   return mrb_ary_new_from_values(M, 2, ret);
 }
 
 static mrb_value
 window_frame_size(mrb_state *M, mrb_value self)
 {
-// Maybe we're using an outdated GLFW...
-#ifdef glfwGetWindowFrameSize
   int l, t, r, b;
+  mrb_value ret[4];
   glfwGetWindowFrameSize(get_window(M, self), &l, &t, &r, &b);
-  mrb_value const ret[] = { mrb_fixnum_value(l), mrb_fixnum_value(t),
-                            mrb_fixnum_value(r), mrb_fixnum_value(b) };
+  ret[0] = mrb_fixnum_value(l);
+  ret[1] = mrb_fixnum_value(t);
+  ret[2] = mrb_fixnum_value(r);
+  ret[3] = mrb_fixnum_value(b);
   return mrb_ary_new_from_values(M, 4, ret);
-#else
-  return mrb_nil_value();
-#endif
 }
 
 static mrb_value
@@ -363,9 +393,11 @@ mrb_glfw3_window_init(mrb_state* mrb, struct RClass *mod)
   mrb_define_method(mrb, mrb_glfw3_window_class, "should_close=",     window_set_should_close,  MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mrb_glfw3_window_class, "title=",            window_set_title,         MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mrb_glfw3_window_class, "window_pos",        window_pos_get,           MRB_ARGS_NONE());
-  mrb_define_method(mrb, mrb_glfw3_window_class, "window_pos=",       window_pos_set,           MRB_ARGS_REQ(2));
+  mrb_define_method(mrb, mrb_glfw3_window_class, "window_pos=",       window_pos_set,           MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, mrb_glfw3_window_class, "cursor_pos",        window_cursor_pos_get,    MRB_ARGS_NONE());
+  mrb_define_method(mrb, mrb_glfw3_window_class, "cursor_pos=",       window_cursor_pos_set,    MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mrb_glfw3_window_class, "window_size",       window_size_get,          MRB_ARGS_NONE());
-  mrb_define_method(mrb, mrb_glfw3_window_class, "window_size=",      window_size_set,          MRB_ARGS_REQ(2));
+  mrb_define_method(mrb, mrb_glfw3_window_class, "window_size=",      window_size_set,          MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mrb_glfw3_window_class, "framebuffer_size",  window_framebuffer_size,  MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_window_class, "window_frame_size", window_frame_size,        MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_window_class, "iconify",           window_iconify,           MRB_ARGS_NONE());

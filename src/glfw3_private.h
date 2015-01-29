@@ -10,6 +10,8 @@
 #include <mruby/array.h>
 #include <mruby/class.h>
 
+#define E_GLFW_ERROR (mrb_class_get(mrb, "GLFWError"))
+
 static inline mrb_value
 mrb_glfw3_ary_delete(mrb_state *mrb, mrb_value ary, mrb_value obj)
 {
