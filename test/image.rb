@@ -1,7 +1,3 @@
-$mrbtest_verbose = true
-
-GLFW.init
-
 assert('GLFW::Image type') do
   assert_kind_of(Class, GLFW::Image)
 end
