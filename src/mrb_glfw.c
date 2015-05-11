@@ -14,9 +14,8 @@
 #include "glfw3_video_mode.h"
 #include "glfw3_window.h"
 
+/* Needed for error callbacks to work correctly */
 static mrb_state *err_M = NULL;
-static struct RClass *glfw_err_class;
-static struct RClass *glfw_module;
 
 static mrb_value
 glfw_init(mrb_state *mrb, mrb_value self)
@@ -24,7 +23,7 @@ glfw_init(mrb_state *mrb, mrb_value self)
   int err;
   err = glfwInit();
   if (err != GL_TRUE) {
-    mrb_raise(mrb, glfw_err_class, "GLFW initialization failed.");
+    mrb_raise(mrb, E_GLFW_ERROR, "GLFW initialization failed.");
   }
   return mrb_bool_value(true);
 }
@@ -238,9 +237,9 @@ mrb_mruby_glfw3_gem_init(mrb_state* mrb)
   /* Setup error callbacks */
   err_M = mrb;
   glfwSetErrorCallback(&glfw_error_func);
-  glfw_err_class = mrb_define_class(mrb, "GLFWError", mrb_class_get(mrb, "StandardError"));
+  struct RClass *glfw_err_class = mrb_define_class(mrb, "GLFWError", mrb_class_get(mrb, "StandardError"));
   /* GLFW module */
-  glfw_module = mrb_define_module(mrb, "GLFW");
+  struct RClass *glfw_module = mrb_define_module(mrb, "GLFW");
   /* Cache */
   mrb_iv_set(mrb, mrb_obj_value(glfw_module), mrb_intern_lit(mrb, "__glfw_objects"), mrb_ary_new(mrb));
   /* module methods */
