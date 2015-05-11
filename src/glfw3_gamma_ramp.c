@@ -88,7 +88,7 @@ gamma_ramp_get_row(mrb_state *mrb, mrb_value self)
   mrb_int row;
   mrb_get_args(mrb, "i", &row);
   gammaramp = get_gamma_ramp(mrb, self);
-  if (row < 0 || row > gammaramp->size) {
+  if (row < 0 || row > (int)gammaramp->size) {
     mrb_raise(mrb, E_INDEX_ERROR, "row is out of range!");
     return mrb_nil_value();
   }
@@ -108,7 +108,7 @@ gamma_ramp_set_row(mrb_state *mrb, mrb_value self)
   mrb_int b;
   mrb_get_args(mrb, "iiii", &row, &r, &g, &b);
   gammaramp = get_gamma_ramp(mrb, self);
-  if (row < 0 || row > gammaramp->size) {
+  if (row < 0 || row > (int)gammaramp->size) {
     mrb_raise(mrb, E_INDEX_ERROR, "row is out of range!");
     return mrb_nil_value();
   }
