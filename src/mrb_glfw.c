@@ -234,12 +234,13 @@ glfw_cache_size(mrb_state *mrb, mrb_value self)
 void
 mrb_mruby_glfw3_gem_init(mrb_state* mrb)
 {
+  struct RClass *glfw_module;
   /* Setup error callbacks */
   err_M = mrb;
   glfwSetErrorCallback(&glfw_error_func);
   mrb_define_class(mrb, "GLFWError", mrb_class_get(mrb, "StandardError"));
   /* GLFW module */
-  struct RClass *glfw_module = mrb_define_module(mrb, "GLFW");
+  glfw_module = mrb_define_module(mrb, "GLFW");
   /* Cache */
   mrb_iv_set(mrb, mrb_obj_value(glfw_module), mrb_intern_lit(mrb, "__glfw_objects"), mrb_ary_new(mrb));
   /* module methods */
