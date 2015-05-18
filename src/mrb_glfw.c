@@ -11,7 +11,7 @@
 #include "glfw3_gamma_ramp.h"
 #include "glfw3_image.h"
 #include "glfw3_monitor.h"
-#include "glfw3_video_mode.h"
+#include "glfw3_vid_mode.h"
 #include "glfw3_window.h"
 
 /* Needed for error callbacks to work correctly */
@@ -237,7 +237,7 @@ mrb_mruby_glfw3_gem_init(mrb_state* mrb)
   /* Setup error callbacks */
   err_M = mrb;
   glfwSetErrorCallback(&glfw_error_func);
-  struct RClass *glfw_err_class = mrb_define_class(mrb, "GLFWError", mrb_class_get(mrb, "StandardError"));
+  mrb_define_class(mrb, "GLFWError", mrb_class_get(mrb, "StandardError"));
   /* GLFW module */
   struct RClass *glfw_module = mrb_define_module(mrb, "GLFW");
   /* Cache */
@@ -495,7 +495,7 @@ mrb_mruby_glfw3_gem_init(mrb_state* mrb)
   mrb_define_const(mrb, glfw_module, "DISCONNECTED", mrb_fixnum_value(GLFW_DISCONNECTED));
   mrb_define_const(mrb, glfw_module, "DONT_CARE", mrb_fixnum_value(GLFW_DONT_CARE));
   /* sub-modules */
-  mrb_glfw3_video_mode_init(mrb, glfw_module);
+  mrb_glfw3_vid_mode_init(mrb, glfw_module);
   mrb_glfw3_gamma_ramp_init(mrb, glfw_module);
   mrb_glfw3_image_init(mrb, glfw_module);
   mrb_glfw3_cursor_init(mrb, glfw_module);

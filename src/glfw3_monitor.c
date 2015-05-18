@@ -11,7 +11,7 @@
 #include <GLFW/glfw3.h>
 
 #include "glfw3_monitor.h"
-#include "glfw3_video_mode.h"
+#include "glfw3_vid_mode.h"
 #include "glfw3_gamma_ramp.h"
 
 static struct RClass *mrb_glfw3_monitor_class;
@@ -92,22 +92,22 @@ monitor_name(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-monitor_video_modes(mrb_state *mrb, mrb_value self)
+monitor_vid_modes(mrb_state *mrb, mrb_value self)
 {
   int count;
   int i;
   mrb_value result = mrb_ary_new(mrb);
-  const GLFWvidmode *video_modes = glfwGetVideoModes(get_monitor(mrb, self), &count);
+  const GLFWvidmode *vid_modes = glfwGetVideoModes(get_monitor(mrb, self), &count);
   for (i = 0; i < count; ++i) {
-    mrb_ary_push(mrb, result, mrb_glfw3_video_mode_value(mrb, video_modes[i]));
+    mrb_ary_push(mrb, result, mrb_glfw3_vid_mode_value(mrb, vid_modes[i]));
   }
   return result;
 }
 
 static mrb_value
-monitor_video_mode(mrb_state *mrb, mrb_value self)
+monitor_vid_mode(mrb_state *mrb, mrb_value self)
 {
-  return mrb_glfw3_video_mode_value(mrb, *glfwGetVideoMode(get_monitor(mrb, self)));
+  return mrb_glfw3_vid_mode_value(mrb, *glfwGetVideoMode(get_monitor(mrb, self)));
 }
 
 static mrb_value
@@ -147,8 +147,8 @@ mrb_glfw3_monitor_init(mrb_state* mrb, struct RClass *mod)
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "position",      monitor_position,       MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "physical_size", monitor_physical_size,  MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "name",          monitor_name,           MRB_ARGS_NONE());
-  mrb_define_method(mrb, mrb_glfw3_monitor_class, "video_modes",   monitor_video_modes,    MRB_ARGS_NONE());
-  mrb_define_method(mrb, mrb_glfw3_monitor_class, "video_mode",    monitor_video_mode,     MRB_ARGS_NONE());
+  mrb_define_method(mrb, mrb_glfw3_monitor_class, "vid_modes",   monitor_vid_modes,    MRB_ARGS_NONE());
+  mrb_define_method(mrb, mrb_glfw3_monitor_class, "vid_mode",    monitor_vid_mode,     MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "gamma=",        monitor_set_gamma,      MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "gamma_ramp",    monitor_get_gamma_ramp, MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "gamma_ramp=",   monitor_set_gamma_ramp, MRB_ARGS_REQ(1));
