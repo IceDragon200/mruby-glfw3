@@ -137,9 +137,11 @@ glfw_set_time(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-glfw_poll_events(mrb_state *M, mrb_value self)
+glfw_poll_events(mrb_state *mrb, mrb_value self)
 {
+  const int id = mrb_gc_arena_save(mrb);
   glfwPollEvents();
+  mrb_gc_arena_restore(mrb, id);
   return self;
 }
 

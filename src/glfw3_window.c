@@ -46,8 +46,10 @@ window_set_ ## _func_ ## _callback(mrb_state *mrb, mrb_value self)        \
 static void CALLBACK_IDENT(_func_)(GLFWwindow *window) { \
   mrb_value argv[1];           \
   mrb_value mrb_window = GET_WINDOW_REF(cb_MRB, window); \
+  const int id = mrb_gc_arena_save(cb_MRB); \
   argv[0] = mrb_window;        \
   mrb_yield_argv(cb_MRB, GET_CALLBACK(_func_), 1, argv); \
+  mrb_gc_arena_restore(cb_MRB, id); \
 } \
 MAKE_MRB_CALLBACK(_name_, _func_);
 
@@ -55,9 +57,11 @@ MAKE_MRB_CALLBACK(_name_, _func_);
 static void CALLBACK_IDENT(_func_)(GLFWwindow *window, _t0_ p0) { \
   mrb_value argv[2];           \
   mrb_value mrb_window = GET_WINDOW_REF(cb_MRB, window); \
+  const int id = mrb_gc_arena_save(cb_MRB); \
   argv[0] = mrb_window;    \
   argv[1] = to_cast(_t0_)(cb_MRB, p0); \
   mrb_yield_argv(cb_MRB, GET_CALLBACK(_func_), 2, argv); \
+  mrb_gc_arena_restore(cb_MRB, id); \
 } \
 MAKE_MRB_CALLBACK(_name_, _func_);
 
@@ -65,10 +69,12 @@ MAKE_MRB_CALLBACK(_name_, _func_);
 static void CALLBACK_IDENT(_func_)(GLFWwindow *window, _t0_ p0, _t1_ p1) { \
   mrb_value argv[3];     \
   mrb_value mrb_window = GET_WINDOW_REF(cb_MRB, window); \
+  const int id = mrb_gc_arena_save(cb_MRB); \
   argv[0] = mrb_window;     \
   argv[1] = to_cast(_t0_)(cb_MRB, p0); \
   argv[2] = to_cast(_t1_)(cb_MRB, p1); \
   mrb_yield_argv(cb_MRB, GET_CALLBACK(_func_), 3, argv); \
+  mrb_gc_arena_restore(cb_MRB, id); \
 } \
 MAKE_MRB_CALLBACK(_name_, _func_);
 
@@ -76,11 +82,13 @@ MAKE_MRB_CALLBACK(_name_, _func_);
 static void CALLBACK_IDENT(_func_)(GLFWwindow *window, _t0_ p0, _t1_ p1, _t2_ p2) { \
   mrb_value argv[4];     \
   mrb_value mrb_window = GET_WINDOW_REF(cb_MRB, window); \
+  const int id = mrb_gc_arena_save(cb_MRB); \
   argv[0] = mrb_window;     \
   argv[1] = to_cast(_t0_)(cb_MRB, p0); \
   argv[2] = to_cast(_t1_)(cb_MRB, p1); \
   argv[3] = to_cast(_t2_)(cb_MRB, p2); \
   mrb_yield_argv(cb_MRB, GET_CALLBACK(_func_), 4, argv); \
+  mrb_gc_arena_restore(cb_MRB, id); \
 } \
 MAKE_MRB_CALLBACK(_name_, _func_);
 
@@ -88,12 +96,14 @@ MAKE_MRB_CALLBACK(_name_, _func_);
 static void CALLBACK_IDENT(_func_)(GLFWwindow *window, _t0_ p0, _t1_ p1, _t2_ p2, _t3_ p3) { \
   mrb_value argv[5];     \
   mrb_value mrb_window = GET_WINDOW_REF(cb_MRB, window); \
+  const int id = mrb_gc_arena_save(cb_MRB); \
   argv[0] = mrb_window;     \
   argv[1] = to_cast(_t0_)(cb_MRB, p0); \
   argv[2] = to_cast(_t1_)(cb_MRB, p1); \
   argv[3] = to_cast(_t2_)(cb_MRB, p2); \
   argv[4] = to_cast(_t3_)(cb_MRB, p3); \
   mrb_yield_argv(cb_MRB, GET_CALLBACK(_func_), 5, argv); \
+  mrb_gc_arena_restore(cb_MRB, id); \
 } \
 MAKE_MRB_CALLBACK(_name_, _func_);
 
@@ -103,6 +113,7 @@ static void CALLBACK_IDENT(_func_)(GLFWwindow *window, int size, _t_ p0) { \
   mrb_value data; \
   int i; \
   mrb_value mrb_window = GET_WINDOW_REF(cb_MRB, window); \
+  const int id = mrb_gc_arena_save(cb_MRB); \
   data = mrb_ary_new(cb_MRB); \
   for (i = 0; i < size; ++i) { \
     mrb_ary_push(cb_MRB, data, to_cast(_cast_)(cb_MRB, p0[i])); \
@@ -110,6 +121,7 @@ static void CALLBACK_IDENT(_func_)(GLFWwindow *window, int size, _t_ p0) { \
   argv[0] = mrb_window; \
   argv[1] = data; \
   mrb_yield_argv(cb_MRB, GET_CALLBACK(_func_), 2, argv); \
+  mrb_gc_arena_restore(cb_MRB, id); \
 } \
 MAKE_MRB_CALLBACK(_name_, _func_);
 /* END OF HAX */
