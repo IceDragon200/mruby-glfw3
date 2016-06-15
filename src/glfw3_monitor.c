@@ -147,8 +147,8 @@ mrb_glfw3_monitor_init(mrb_state* mrb, struct RClass *mod)
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "position",      monitor_position,       MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "physical_size", monitor_physical_size,  MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "name",          monitor_name,           MRB_ARGS_NONE());
-  mrb_define_method(mrb, mrb_glfw3_monitor_class, "vid_modes",   monitor_vid_modes,    MRB_ARGS_NONE());
-  mrb_define_method(mrb, mrb_glfw3_monitor_class, "vid_mode",    monitor_vid_mode,     MRB_ARGS_NONE());
+  mrb_define_method(mrb, mrb_glfw3_monitor_class, "vid_modes",     monitor_vid_modes,    MRB_ARGS_NONE());
+  mrb_define_method(mrb, mrb_glfw3_monitor_class, "vid_mode",      monitor_vid_mode,     MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "gamma=",        monitor_set_gamma,      MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "gamma_ramp",    monitor_get_gamma_ramp, MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "gamma_ramp=",   monitor_set_gamma_ramp, MRB_ARGS_REQ(1));
