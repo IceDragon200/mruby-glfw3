@@ -151,15 +151,18 @@ window_initialize(mrb_state *mrb, mrb_value self)
 {
   mrb_int w, h;
   char *title;
-  GLFWwindow *win;
-  mrb_value monitor = mrb_nil_value(), share = mrb_nil_value();
-  mrb_get_args(mrb, "iiz|oo", &w, &h, &title, &monitor, &share);
-  win = glfwCreateWindow(w, h, title, NULL, NULL);
+  GLFWwindow* win;
+  GLFWmonitor* monitor = NULL;
+  GLFWwindow* share = NULL;
+  mrb_get_args(mrb, "iiz|dd",
+    &w, &h, &title,
+    &monitor, &mrb_glfw3_monitor_type,
+    &share, mrb_glfw3_window_type);
+  win = glfwCreateWindow(w, h, title, monitor, share);
   if (!win) {
     mrb_raise(mrb, E_GLFW_ERROR, "Could not create Window.");
   }
-  DATA_PTR(self) = win;
-  DATA_TYPE(self) = &mrb_glfw3_window_type;
+  mrb_data_init(self, win, &mrb_glfw3_window_type);
   glfwSetWindowUserPointer(win, mrb_obj_ptr(self));
   mrb_glfw3_cache_object(mrb, self);
   return self;
