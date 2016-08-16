@@ -14,8 +14,8 @@
 #include "glfw3_vid_mode.h"
 #include "glfw3_window.h"
 
-/* Needed for error callbacks to work correctly */
-static mrb_state *err_M = NULL;
+/* Needed for callbacks to work correctly */
+static mrb_state *glfw_mrb_state = NULL;
 
 static mrb_value
 glfw_init(mrb_state *mrb, mrb_value self)
@@ -58,9 +58,9 @@ glfw_terminate(mrb_state *mrb, mrb_value klass)
 static void
 glfw_error_func(int code, char const* str)
 {
-  if (err_M) {
-    mrb_raisef(err_M, mrb_class_get(err_M, "GLFWError"), "%S: %S",
-               mrb_fixnum_value(code), mrb_str_new_cstr(err_M, str));
+  if (glfw_mrb_state) {
+    mrb_raisef(glfw_mrb_state, mrb_class_get(glfw_mrb_state, "GLFWError"), "%S: %S",
+               mrb_fixnum_value(code), mrb_str_new_cstr(glfw_mrb_state, str));
   } else {
     fprintf(stderr, "GLFW error: %s (%d)\n", str, code);
   }
@@ -227,6 +227,38 @@ glfw_joystick_name(mrb_state *mrb, mrb_value self)
   return mrb_str_new_cstr(mrb, name);
 }
 
+static void
+glfw_joystick_callback_handler(int joy, int event)
+{
+  struct RClass *glfw_module = mrb_module_get(glfw_mrb_state, "GLFW");
+  mrb_value cb = mrb_iv_get(glfw_mrb_state, mrb_obj_value(glfw_module), mrb_intern_lit(glfw_mrb_state, "cb_joystick"));
+  mrb_value argv[] = { mrb_fixnum_value(joy), mrb_fixnum_value(event) };
+  mrb_yield_argv(glfw_mrb_state, cb, 2, argv);
+}
+
+static mrb_value
+glfw_set_joystick_callback(mrb_state* mrb, mrb_value self)
+{
+  mrb_value obj = mrb_nil_value();
+  mrb_value blk = mrb_nil_value();
+  mrb_value cb = mrb_nil_value();
+  struct RClass *glfw_module;
+  mrb_get_args(mrb, "|o&", &obj, &blk);
+  if (mrb_nil_p(obj)) {
+    cb = blk;
+  } else {
+    cb = obj;
+  }
+  glfw_module = mrb_module_get(mrb, "GLFW");
+  mrb_iv_set(mrb, mrb_obj_value(glfw_module), mrb_intern_lit(mrb, "cb_joystick"), cb);
+  if (mrb_nil_p(cb)) {
+    glfwSetJoystickCallback(NULL);
+  } else {
+    glfwSetJoystickCallback(glfw_joystick_callback_handler);
+  }
+  return self;
+}
+
 static mrb_value
 glfw_cache_size(mrb_state *mrb, mrb_value self)
 {
@@ -238,7 +270,7 @@ mrb_mruby_glfw3_gem_init(mrb_state* mrb)
 {
   struct RClass *glfw_module;
   /* Setup error callbacks */
-  err_M = mrb;
+  glfw_mrb_state = mrb;
   glfwSetErrorCallback(&glfw_error_func);
   mrb_define_class(mrb, "GLFWError", mrb_class_get(mrb, "StandardError"));
   /* GLFW module */
@@ -266,6 +298,7 @@ mrb_mruby_glfw3_gem_init(mrb_state* mrb)
   mrb_define_class_method(mrb, glfw_module, "joystick_axes",        glfw_joystick_axes,         MRB_ARGS_REQ(1));
   mrb_define_class_method(mrb, glfw_module, "joystick_buttons",     glfw_joystick_buttons,      MRB_ARGS_REQ(1));
   mrb_define_class_method(mrb, glfw_module, "joystick_name",        glfw_joystick_name,         MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, glfw_module, "set_joystick_callback", glfw_set_joystick_callback, MRB_ARGS_ARG(0,1) | MRB_ARGS_BLOCK());
   /* internal cache */
   mrb_define_class_method(mrb, glfw_module, "cache_size", glfw_cache_size, MRB_ARGS_NONE());
   /* Constants */
@@ -510,5 +543,5 @@ void
 mrb_mruby_glfw3_gem_final(mrb_state *mrb)
 {
   glfw_terminate_m(mrb);
-  err_M = NULL;
+  glfw_mrb_state = NULL;
 }
