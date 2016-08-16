@@ -146,6 +146,13 @@ get_window(mrb_state *mrb, mrb_value self)
   return (GLFWwindow*)mrb_data_get_ptr(mrb, self, &mrb_glfw3_window_type);
 }
 
+/**
+ * @param [Integer] w width of the window
+ * @param [Integer] h height of the window
+ * @param [String] title for the window
+ * @param [GLFW::Monitor] monitor
+ * @param [GLFW::Window] share
+ */
 static mrb_value
 window_initialize(mrb_state *mrb, mrb_value self)
 {

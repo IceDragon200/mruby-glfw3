@@ -18,7 +18,7 @@
 static mrb_state *glfw_mrb_state = NULL;
 
 static mrb_value
-glfw_init(mrb_state *mrb, mrb_value self)
+glfw_init(mrb_state* mrb, mrb_value self)
 {
   int err;
   err = glfwInit();
@@ -29,7 +29,7 @@ glfw_init(mrb_state *mrb, mrb_value self)
 }
 
 static void
-glfw_terminate_m(mrb_state *mrb)
+glfw_terminate_m(mrb_state* mrb)
 {
   mrb_value objs = mrb_glfw3_cache(mrb);
   for (mrb_int i = 0; i < RARRAY_LEN(objs); ++i) {
@@ -48,7 +48,7 @@ glfw_terminate_m(mrb_state *mrb)
 }
 
 static mrb_value
-glfw_terminate(mrb_state *mrb, mrb_value klass)
+glfw_terminate(mrb_state* mrb, mrb_value klass)
 {
   glfw_terminate_m(mrb);
   mrb_ary_clear(mrb, mrb_glfw3_cache(mrb));
@@ -86,7 +86,7 @@ glfw_set_swap_interval(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-glfw_proc_address(mrb_state *mrb, mrb_value self)
+glfw_proc_address(mrb_state* mrb, mrb_value self)
 {
   /* TODO: figure out how to static assert nicely without C++ */
   /*static_assert(sizeof(void*) == sizeof(GLFWglproc), "function pointer and pointer size must be same");*/
@@ -137,7 +137,7 @@ glfw_set_time(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-glfw_poll_events(mrb_state *mrb, mrb_value self)
+glfw_poll_events(mrb_state* mrb, mrb_value self)
 {
   const int id = mrb_gc_arena_save(mrb);
   glfwPollEvents();
@@ -160,7 +160,7 @@ glfw_default_window_hints(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-glfw_window_hint(mrb_state *mrb, mrb_value self)
+glfw_window_hint(mrb_state* mrb, mrb_value self)
 {
   mrb_int target, hint;
   mrb_get_args(mrb, "ii", &target, &hint);
@@ -169,14 +169,14 @@ glfw_window_hint(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-glfw_post_empty_event(mrb_state *mrb, mrb_value self)
+glfw_post_empty_event(mrb_state* mrb, mrb_value self)
 {
   glfwPostEmptyEvent();
   return self;
 }
 
 static mrb_value
-glfw_joystick_present(mrb_state *mrb, mrb_value self)
+glfw_joystick_present(mrb_state* mrb, mrb_value self)
 {
   mrb_int joy;
   mrb_get_args(mrb, "i", &joy);
@@ -184,7 +184,7 @@ glfw_joystick_present(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-glfw_joystick_axes(mrb_state *mrb, mrb_value self)
+glfw_joystick_axes(mrb_state* mrb, mrb_value self)
 {
   mrb_int joy;
   int count;
@@ -201,7 +201,7 @@ glfw_joystick_axes(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-glfw_joystick_buttons(mrb_state *mrb, mrb_value self)
+glfw_joystick_buttons(mrb_state* mrb, mrb_value self)
 {
   mrb_int joy;
   int count;
@@ -218,7 +218,7 @@ glfw_joystick_buttons(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-glfw_joystick_name(mrb_state *mrb, mrb_value self)
+glfw_joystick_name(mrb_state* mrb, mrb_value self)
 {
   mrb_int joy;
   const char *name;
@@ -260,7 +260,7 @@ glfw_set_joystick_callback(mrb_state* mrb, mrb_value self)
 }
 
 static mrb_value
-glfw_cache_size(mrb_state *mrb, mrb_value self)
+glfw_cache_size(mrb_state* mrb, mrb_value self)
 {
   return mrb_fixnum_value(RARRAY_LEN(mrb_glfw3_cache(mrb)));
 }
@@ -540,7 +540,7 @@ mrb_mruby_glfw3_gem_init(mrb_state* mrb)
 }
 
 void
-mrb_mruby_glfw3_gem_final(mrb_state *mrb)
+mrb_mruby_glfw3_gem_final(mrb_state* mrb)
 {
   glfw_terminate_m(mrb);
   glfw_mrb_state = NULL;
