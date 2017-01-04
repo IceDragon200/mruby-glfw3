@@ -127,41 +127,43 @@ MAKE_MRB_CALLBACK(_name_, _func_);
 /* END OF HAX */
 
 
-static struct RClass *mrb_glfw3_window_class;
-static mrb_state *cb_MRB;
+static struct RClass* mrb_glfw3_window_class;
+static mrb_state* cb_MRB;
 
-void
-window_free(mrb_state *mrb, void *ptr)
+static void
+window_free(mrb_state* mrb, void* ptr)
 {
   if (ptr) {
     glfwDestroyWindow((GLFWwindow*)ptr);
   }
 }
 
-const struct mrb_data_type mrb_glfw3_window_type = { "GLFWwindow", window_free };
+MRB_GLFW_EXTERN const struct mrb_data_type mrb_glfw3_window_type = { "GLFWwindow", window_free };
 
 static inline GLFWwindow*
-get_window(mrb_state *mrb, mrb_value self)
+get_window(mrb_state* mrb, mrb_value self)
 {
   return (GLFWwindow*)mrb_data_get_ptr(mrb, self, &mrb_glfw3_window_type);
 }
 
 static mrb_value
-window_initialize(mrb_state *mrb, mrb_value self)
+window_initialize(mrb_state* mrb, mrb_value self)
 {
   mrb_int w, h;
-  char *title;
+  char* title;
   GLFWwindow* win;
   GLFWmonitor* monitor = NULL;
   GLFWwindow* share = NULL;
   mrb_get_args(mrb, "iiz|dd",
-    &w, &h, &title,
-    &monitor, &mrb_glfw3_monitor_type,
-    &share, mrb_glfw3_window_type);
+               &w, &h, &title,
+               &monitor, &mrb_glfw3_monitor_type,
+               &share, mrb_glfw3_window_type);
   win = glfwCreateWindow(w, h, title, monitor, share);
+
   if (!win) {
     mrb_raise(mrb, E_GLFW_ERROR, "Could not create Window.");
   }
+
   mrb_data_init(self, win, &mrb_glfw3_window_type);
   glfwSetWindowUserPointer(win, mrb_obj_ptr(self));
   mrb_glfw3_cache_object(mrb, self);
@@ -169,7 +171,7 @@ window_initialize(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-window_destroy(mrb_state *mrb, mrb_value self)
+window_destroy(mrb_state* mrb, mrb_value self)
 {
   window_free(mrb, get_window(mrb, self));
   DATA_PTR(self) = NULL;
@@ -179,25 +181,25 @@ window_destroy(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-window_make_current(mrb_state *M, mrb_value self)
+window_make_current(mrb_state* M, mrb_value self)
 {
   return glfwMakeContextCurrent(get_window(M, self)), self;
 }
 
 static mrb_value
-window_swap_buffers(mrb_state *M, mrb_value self)
+window_swap_buffers(mrb_state* M, mrb_value self)
 {
   return glfwSwapBuffers(get_window(M, self)), self;
 }
 
 static mrb_value
-window_get_clipboard(mrb_state *M, mrb_value self)
+window_get_clipboard(mrb_state* M, mrb_value self)
 {
   return mrb_str_new_cstr(M, glfwGetClipboardString(get_window(M, self)));
 }
 
 static mrb_value
-window_set_clipboard(mrb_state *M, mrb_value self)
+window_set_clipboard(mrb_state* M, mrb_value self)
 {
   char* str;
   mrb_get_args(M, "z", &str);
@@ -206,7 +208,7 @@ window_set_clipboard(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-window_set_title(mrb_state *M, mrb_value self)
+window_set_title(mrb_state* M, mrb_value self)
 {
   char* str;
   mrb_get_args(M, "z", &str);
@@ -215,13 +217,13 @@ window_set_title(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-window_get_should_close(mrb_state *mrb, mrb_value self)
+window_get_should_close(mrb_state* mrb, mrb_value self)
 {
   return mrb_bool_value(glfwWindowShouldClose(get_window(mrb, self)));
 }
 
 static mrb_value
-window_set_should_close(mrb_state *mrb, mrb_value self)
+window_set_should_close(mrb_state* mrb, mrb_value self)
 {
   mrb_int b;
   mrb_get_args(mrb, "i", &b);
@@ -230,7 +232,7 @@ window_set_should_close(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-window_size_get(mrb_state *M, mrb_value self)
+window_size_get(mrb_state* M, mrb_value self)
 {
   int w, h;
   mrb_value ret[2];
@@ -241,7 +243,7 @@ window_size_get(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-window_size_set(mrb_state *M, mrb_value self)
+window_size_set(mrb_state* M, mrb_value self)
 {
   mrb_value ary;
   mrb_get_args(M, "A", &ary);
@@ -252,7 +254,7 @@ window_size_set(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-window_pos_get(mrb_state *M, mrb_value self)
+window_pos_get(mrb_state* M, mrb_value self)
 {
   int w, h;
   mrb_value ret[2];
@@ -263,7 +265,7 @@ window_pos_get(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-window_pos_set(mrb_state *M, mrb_value self)
+window_pos_set(mrb_state* M, mrb_value self)
 {
   mrb_value ary;
   mrb_get_args(M, "A", &ary);
@@ -274,7 +276,7 @@ window_pos_set(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-window_cursor_pos_get(mrb_state *mrb, mrb_value self)
+window_cursor_pos_get(mrb_state* mrb, mrb_value self)
 {
   double x, y;
   mrb_value ret[2];
@@ -285,7 +287,7 @@ window_cursor_pos_get(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-window_cursor_pos_set(mrb_state *M, mrb_value self)
+window_cursor_pos_set(mrb_state* M, mrb_value self)
 {
   mrb_value ary;
   mrb_get_args(M, "A", &ary);
@@ -296,7 +298,7 @@ window_cursor_pos_set(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-window_framebuffer_size(mrb_state *M, mrb_value self)
+window_framebuffer_size(mrb_state* M, mrb_value self)
 {
   int w, h;
   mrb_value ret[2];
@@ -307,7 +309,7 @@ window_framebuffer_size(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-window_frame_size(mrb_state *M, mrb_value self)
+window_frame_size(mrb_state* M, mrb_value self)
 {
   int l, t, r, b;
   mrb_value ret[4];
@@ -320,41 +322,41 @@ window_frame_size(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-window_iconify(mrb_state *M, mrb_value self)
+window_iconify(mrb_state* M, mrb_value self)
 {
   glfwIconifyWindow(get_window(M, self));
   return self;
 }
 
 static mrb_value
-window_restore(mrb_state *M, mrb_value self)
+window_restore(mrb_state* M, mrb_value self)
 {
   glfwRestoreWindow(get_window(M, self));
   return self;
 }
 
 static mrb_value
-window_show(mrb_state *M, mrb_value self)
+window_show(mrb_state* M, mrb_value self)
 {
   glfwShowWindow(get_window(M, self));
   return self;
 }
 
 static mrb_value
-window_hide(mrb_state *M, mrb_value self)
+window_hide(mrb_state* M, mrb_value self)
 {
   glfwHideWindow(get_window(M, self));
   return self;
 }
 
 static mrb_value
-window_get_monitor(mrb_state *mrb, mrb_value self)
+window_get_monitor(mrb_state* mrb, mrb_value self)
 {
   return mrb_glfw3_monitor_value(mrb, glfwGetWindowMonitor(get_window(mrb, self)));
 }
 
 static mrb_value
-window_get_window_attrib(mrb_state *mrb, mrb_value self)
+window_get_window_attrib(mrb_state* mrb, mrb_value self)
 {
   mrb_int attrib;
   mrb_get_args(mrb, "i", &attrib);
@@ -362,7 +364,7 @@ window_get_window_attrib(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-window_get_input_mode(mrb_state *mrb, mrb_value self)
+window_get_input_mode(mrb_state* mrb, mrb_value self)
 {
   mrb_int mode;
   mrb_get_args(mrb, "i", &mode);
@@ -370,7 +372,7 @@ window_get_input_mode(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-window_set_input_mode(mrb_state *mrb, mrb_value self)
+window_set_input_mode(mrb_state* mrb, mrb_value self)
 {
   mrb_int mode;
   mrb_int value;
@@ -395,8 +397,8 @@ CALLBACK_SETUP_N1(glfwSetCursorEnterCallback, cursor_enter, int);
 CALLBACK_SETUP_N2(glfwSetScrollCallback, scroll, double, double);
 CALLBACK_SETUP_N_ary(glfwSetDropCallback, drop, const char**, string);
 
-void
-mrb_glfw3_window_init(mrb_state* mrb, struct RClass *mod)
+MRB_GLFW_EXTERN void
+mrb_glfw3_window_init(mrb_state* mrb, struct RClass* mod)
 {
   cb_MRB = mrb;
   mrb_glfw3_window_class = mrb_define_class_under(mrb, mod, "Window", mrb->object_class);
@@ -427,7 +429,6 @@ mrb_glfw3_window_init(mrb_state* mrb, struct RClass *mod)
   mrb_define_method(mrb, mrb_glfw3_window_class, "swap_buffers",      window_swap_buffers,      MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb_glfw3_window_class, "get_input_mode",    window_get_input_mode,    MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mrb_glfw3_window_class, "set_input_mode",    window_set_input_mode,    MRB_ARGS_REQ(2));
-
   /* Callbacks */
   mrb_define_method(mrb, mrb_glfw3_window_class, "set_pos_callback",              window_set_pos_callback,              MRB_ARGS_BLOCK());
   mrb_define_method(mrb, mrb_glfw3_window_class, "set_size_callback",             window_set_size_callback,             MRB_ARGS_BLOCK());

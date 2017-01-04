@@ -6,6 +6,7 @@
 #include <mruby/array.h>
 #include <mruby/error.h>
 
+#include "mrb_glfw_common.h"
 #include "glfw3_private.h"
 #include "glfw3_cursor.h"
 #include "glfw3_gamma_ramp.h"
@@ -15,25 +16,29 @@
 #include "glfw3_window.h"
 
 /* Needed for error callbacks to work correctly */
-static mrb_state *err_M = NULL;
+static mrb_state* err_M = NULL;
 
 static mrb_value
-glfw_init(mrb_state *mrb, mrb_value self)
+glfw_init(mrb_state* mrb, mrb_value self)
 {
   int err;
   err = glfwInit();
+
   if (err != GL_TRUE) {
     mrb_raise(mrb, E_GLFW_ERROR, "GLFW initialization failed.");
   }
+
   return mrb_bool_value(true);
 }
 
 static void
-glfw_terminate_m(mrb_state *mrb)
+glfw_terminate_m(mrb_state* mrb)
 {
   mrb_value objs = mrb_glfw3_cache(mrb);
+
   for (mrb_int i = 0; i < RARRAY_LEN(objs); ++i) {
     mrb_value const obj = RARRAY_PTR(objs)[i];
+
     if (DATA_TYPE(obj) == &mrb_glfw3_window_type) {
       if (DATA_PTR(obj)) {
         glfwDestroyWindow((GLFWwindow*)DATA_PTR(obj));
@@ -44,11 +49,12 @@ glfw_terminate_m(mrb_state *mrb)
       mrb_assert(false);
     }
   }
+
   glfwTerminate();
 }
 
 static mrb_value
-glfw_terminate(mrb_state *mrb, mrb_value klass)
+glfw_terminate(mrb_state* mrb, mrb_value klass)
 {
   glfw_terminate_m(mrb);
   mrb_ary_clear(mrb, mrb_glfw3_cache(mrb));
@@ -67,9 +73,10 @@ glfw_error_func(int code, char const* str)
 }
 
 static mrb_value
-glfw_current_context(mrb_state *M, mrb_value self)
+glfw_current_context(mrb_state* M, mrb_value self)
 {
-  GLFWwindow * const cur = glfwGetCurrentContext();
+  GLFWwindow* const cur = glfwGetCurrentContext();
+
   if (cur) {
     return mrb_obj_value(glfwGetWindowUserPointer(cur));
   } else {
@@ -78,7 +85,7 @@ glfw_current_context(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-glfw_set_swap_interval(mrb_state *M, mrb_value self)
+glfw_set_swap_interval(mrb_state* M, mrb_value self)
 {
   mrb_int v;
   mrb_get_args(M, "i", &v);
@@ -86,25 +93,25 @@ glfw_set_swap_interval(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-glfw_proc_address(mrb_state *mrb, mrb_value self)
+glfw_proc_address(mrb_state* mrb, mrb_value self)
 {
   /* TODO: figure out how to static assert nicely without C++ */
   /*static_assert(sizeof(void*) == sizeof(GLFWglproc), "function pointer and pointer size must be same");*/
-  char *str;
+  char* str;
   mrb_get_args(mrb, "z", &str);
   return mrb_cptr_value(mrb, (void*)glfwGetProcAddress(str));
 }
 
 static mrb_value
-glfw_extension_supported_p(mrb_state *M, mrb_value self)
+glfw_extension_supported_p(mrb_state* M, mrb_value self)
 {
-  char *str;
+  char* str;
   mrb_get_args(M, "z", &str);
   return mrb_bool_value(glfwExtensionSupported(str) != GL_FALSE);
 }
 
 static mrb_value
-glfw_version(mrb_state *M, mrb_value self)
+glfw_version(mrb_state* M, mrb_value self)
 {
   int major, minor, rev;
   mrb_value vers[3];
@@ -116,19 +123,19 @@ glfw_version(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-glfw_version_string(mrb_state *M, mrb_value self)
+glfw_version_string(mrb_state* M, mrb_value self)
 {
   return mrb_str_new_cstr(M, glfwGetVersionString());
 }
 
 static mrb_value
-glfw_get_time(mrb_state *M, mrb_value self)
+glfw_get_time(mrb_state* M, mrb_value self)
 {
   return mrb_float_value(M, glfwGetTime());
 }
 
 static mrb_value
-glfw_set_time(mrb_state *M, mrb_value self)
+glfw_set_time(mrb_state* M, mrb_value self)
 {
   mrb_float v;
   mrb_get_args(M, "f", &v);
@@ -137,7 +144,7 @@ glfw_set_time(mrb_state *M, mrb_value self)
 }
 
 static mrb_value
-glfw_poll_events(mrb_state *mrb, mrb_value self)
+glfw_poll_events(mrb_state* mrb, mrb_value self)
 {
   const int id = mrb_gc_arena_save(mrb);
   glfwPollEvents();
@@ -146,21 +153,21 @@ glfw_poll_events(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-glfw_wait_events(mrb_state *M, mrb_value self)
+glfw_wait_events(mrb_state* M, mrb_value self)
 {
   //glfwWaitEvents();
   return self;
 }
 
 static mrb_value
-glfw_default_window_hints(mrb_state *M, mrb_value self)
+glfw_default_window_hints(mrb_state* M, mrb_value self)
 {
   glfwDefaultWindowHints();
   return self;
 }
 
 static mrb_value
-glfw_window_hint(mrb_state *mrb, mrb_value self)
+glfw_window_hint(mrb_state* mrb, mrb_value self)
 {
   mrb_int target, hint;
   mrb_get_args(mrb, "ii", &target, &hint);
@@ -169,14 +176,14 @@ glfw_window_hint(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-glfw_post_empty_event(mrb_state *mrb, mrb_value self)
+glfw_post_empty_event(mrb_state* mrb, mrb_value self)
 {
   glfwPostEmptyEvent();
   return self;
 }
 
 static mrb_value
-glfw_joystick_present(mrb_state *mrb, mrb_value self)
+glfw_joystick_present(mrb_state* mrb, mrb_value self)
 {
   mrb_int joy;
   mrb_get_args(mrb, "i", &joy);
@@ -184,51 +191,55 @@ glfw_joystick_present(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-glfw_joystick_axes(mrb_state *mrb, mrb_value self)
+glfw_joystick_axes(mrb_state* mrb, mrb_value self)
 {
   mrb_int joy;
   int count;
   int i;
-  const float *axes;
+  const float* axes;
   mrb_value result;
   mrb_get_args(mrb, "i", &joy);
   axes = glfwGetJoystickAxes(joy, &count);
   result = mrb_ary_new(mrb);
+
   for (i = 0; i < count; ++i) {
     mrb_ary_push(mrb, result, mrb_float_value(mrb, axes[i]));
   }
+
   return result;
 }
 
 static mrb_value
-glfw_joystick_buttons(mrb_state *mrb, mrb_value self)
+glfw_joystick_buttons(mrb_state* mrb, mrb_value self)
 {
   mrb_int joy;
   int count;
   int i;
-  const unsigned char *buttons;
+  const unsigned char* buttons;
   mrb_value result;
   mrb_get_args(mrb, "i", &joy);
   buttons = glfwGetJoystickButtons(joy, &count);
   result = mrb_ary_new(mrb);
+
   for (i = 0; i < count; ++i) {
     mrb_ary_push(mrb, result, mrb_fixnum_value(buttons[i]));
   }
+
   return result;
 }
 
 static mrb_value
-glfw_joystick_name(mrb_state *mrb, mrb_value self)
+glfw_joystick_name(mrb_state* mrb, mrb_value self)
 {
   mrb_int joy;
-  const char *name;
+  const char* name;
   mrb_get_args(mrb, "i", &joy);
   name = glfwGetJoystickName(joy);
   return mrb_str_new_cstr(mrb, name);
 }
 
 static mrb_value
-glfw_cache_size(mrb_state *mrb, mrb_value self)
+glfw_cache_size(mrb_state* mrb, mrb_value self)
 {
   return mrb_fixnum_value(RARRAY_LEN(mrb_glfw3_cache(mrb)));
 }
@@ -236,7 +247,7 @@ glfw_cache_size(mrb_state *mrb, mrb_value self)
 void
 mrb_mruby_glfw3_gem_init(mrb_state* mrb)
 {
-  struct RClass *glfw_module;
+  struct RClass* glfw_module;
   /* Setup error callbacks */
   err_M = mrb;
   glfwSetErrorCallback(&glfw_error_func);
@@ -507,7 +518,7 @@ mrb_mruby_glfw3_gem_init(mrb_state* mrb)
 }
 
 void
-mrb_mruby_glfw3_gem_final(mrb_state *mrb)
+mrb_mruby_glfw3_gem_final(mrb_state* mrb)
 {
   glfw_terminate_m(mrb);
   err_M = NULL;

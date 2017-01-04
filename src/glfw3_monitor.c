@@ -14,48 +14,49 @@
 #include "glfw3_vid_mode.h"
 #include "glfw3_gamma_ramp.h"
 
-static struct RClass *mrb_glfw3_monitor_class;
-const struct mrb_data_type mrb_glfw3_monitor_type = { "GLFWmonitor", NULL };
+static struct RClass* mrb_glfw3_monitor_class;
+MRB_GLFW_EXTERN const struct mrb_data_type mrb_glfw3_monitor_type = { "GLFWmonitor", NULL };
 
-mrb_value
-mrb_glfw3_monitor_value(mrb_state *mrb, GLFWmonitor *mon)
+MRB_GLFW_EXTERN mrb_value
+mrb_glfw3_monitor_value(mrb_state* mrb, GLFWmonitor* mon)
 {
   mrb_value monitor = mrb_obj_new(mrb, mrb_glfw3_monitor_class, 0, NULL);
-  DATA_PTR(monitor) = mon;
-  DATA_TYPE(monitor) = &mrb_glfw3_monitor_type;
+  mrb_data_init(monitor, mon, &mrb_glfw3_monitor_type);
   return monitor;
 }
 
 static mrb_value
-glfw_s_monitors(mrb_state *mrb, mrb_value klass)
+glfw_s_monitors(mrb_state* mrb, mrb_value klass)
 {
   mrb_value result;
   int count;
   int i;
-  GLFWmonitor **monitors;
+  GLFWmonitor** monitors;
   result = mrb_ary_new(mrb);
   monitors = glfwGetMonitors(&count);
+
   for (i = 0; i < count; ++i) {
     mrb_ary_push(mrb, result, mrb_glfw3_monitor_value(mrb, monitors[i]));
   }
+
   return result;
 }
 
 static mrb_value
-glfw_s_primary_monitor(mrb_state *mrb, mrb_value klass)
+glfw_s_primary_monitor(mrb_state* mrb, mrb_value klass)
 {
-  GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+  GLFWmonitor* monitor = glfwGetPrimaryMonitor();
   return mrb_glfw3_monitor_value(mrb, monitor);
 }
 
 static mrb_value
-glfw_s_set_monitor_callback(mrb_state *mrb, mrb_value klass)
+glfw_s_set_monitor_callback(mrb_state* mrb, mrb_value klass)
 {
   return klass;
 }
 
 static mrb_value
-monitor_position(mrb_state *mrb, mrb_value self)
+monitor_position(mrb_state* mrb, mrb_value self)
 {
   mrb_value vals[2];
   int xpos;
@@ -67,7 +68,7 @@ monitor_position(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-monitor_physical_size(mrb_state *mrb, mrb_value self)
+monitor_physical_size(mrb_state* mrb, mrb_value self)
 {
   mrb_value vals[2];
   int widthMM;
@@ -79,33 +80,35 @@ monitor_physical_size(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-monitor_name(mrb_state *mrb, mrb_value self)
+monitor_name(mrb_state* mrb, mrb_value self)
 {
-  const char *name = glfwGetMonitorName(mrb_glfw3_get_monitor(mrb, self));
+  const char* name = glfwGetMonitorName(mrb_glfw3_get_monitor(mrb, self));
   return mrb_str_new_cstr(mrb, name);
 }
 
 static mrb_value
-monitor_vid_modes(mrb_state *mrb, mrb_value self)
+monitor_vid_modes(mrb_state* mrb, mrb_value self)
 {
   int count;
   int i;
   mrb_value result = mrb_ary_new(mrb);
-  const GLFWvidmode *vid_modes = glfwGetVideoModes(mrb_glfw3_get_monitor(mrb, self), &count);
+  const GLFWvidmode* vid_modes = glfwGetVideoModes(mrb_glfw3_get_monitor(mrb, self), &count);
+
   for (i = 0; i < count; ++i) {
     mrb_ary_push(mrb, result, mrb_glfw3_vid_mode_value(mrb, vid_modes[i]));
   }
+
   return result;
 }
 
 static mrb_value
-monitor_vid_mode(mrb_state *mrb, mrb_value self)
+monitor_vid_mode(mrb_state* mrb, mrb_value self)
 {
   return mrb_glfw3_vid_mode_value(mrb, *glfwGetVideoMode(mrb_glfw3_get_monitor(mrb, self)));
 }
 
 static mrb_value
-monitor_set_gamma(mrb_state *mrb, mrb_value self)
+monitor_set_gamma(mrb_state* mrb, mrb_value self)
 {
   mrb_float gamma;
   mrb_get_args(mrb, "f", &gamma);
@@ -114,28 +117,27 @@ monitor_set_gamma(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-monitor_get_gamma_ramp(mrb_state *mrb, mrb_value self)
+monitor_get_gamma_ramp(mrb_state* mrb, mrb_value self)
 {
-  const GLFWgammaramp *gammaramp = glfwGetGammaRamp(mrb_glfw3_get_monitor(mrb, self));
+  const GLFWgammaramp* gammaramp = glfwGetGammaRamp(mrb_glfw3_get_monitor(mrb, self));
   return mrb_glfw3_gamma_ramp_value(mrb, gammaramp);
 }
 
 static mrb_value
-monitor_set_gamma_ramp(mrb_state *mrb, mrb_value self)
+monitor_set_gamma_ramp(mrb_state* mrb, mrb_value self)
 {
-  GLFWgammaramp *gammaramp;
+  GLFWgammaramp* gammaramp;
   mrb_get_args(mrb, "d", &gammaramp, &mrb_glfw3_gamma_ramp_type);
   glfwSetGammaRamp(mrb_glfw3_get_monitor(mrb, self), gammaramp);
   return mrb_nil_value();
 }
 
-void
-mrb_glfw3_monitor_init(mrb_state* mrb, struct RClass *mod)
+MRB_GLFW_EXTERN void
+mrb_glfw3_monitor_init(mrb_state* mrb, struct RClass* mod)
 {
   mrb_define_class_method(mrb, mod, "monitors",             glfw_s_monitors,             MRB_ARGS_NONE());
   mrb_define_class_method(mrb, mod, "primary_monitor",      glfw_s_primary_monitor,      MRB_ARGS_NONE());
   mrb_define_class_method(mrb, mod, "set_monitor_callback", glfw_s_set_monitor_callback, MRB_ARGS_BLOCK());
-
   mrb_glfw3_monitor_class = mrb_define_class_under(mrb, mod, "Monitor", mrb->object_class);
   MRB_SET_INSTANCE_TT(mrb_glfw3_monitor_class, MRB_TT_DATA);
   mrb_define_method(mrb, mrb_glfw3_monitor_class, "position",      monitor_position,       MRB_ARGS_NONE());

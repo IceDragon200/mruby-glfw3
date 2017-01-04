@@ -12,8 +12,7 @@
 
 #define NUM_OF_CHANNELS 4
 
-typedef struct pixel_
-{
+typedef struct pixel_ {
   union {
     unsigned int val;
     struct {
@@ -22,25 +21,27 @@ typedef struct pixel_
   };
 } pixel_t;
 
-static struct RClass *mrb_glfw3_image_class;
+static struct RClass* mrb_glfw3_image_class;
 
-void
-mrb_glfw3_image_free(mrb_state *mrb, void *ptr)
+static void
+mrb_glfw3_image_free(mrb_state* mrb, void* ptr)
 {
-  GLFWimage *img = ptr;
+  GLFWimage* img = ptr;
+
   if (img) {
     if (img->pixels) {
       mrb_free(mrb, img->pixels);
       img->pixels = NULL;
     }
+
     mrb_free(mrb, img);
   }
 }
 
-const struct mrb_data_type mrb_glfw3_image_type = { "GLFWimage", mrb_glfw3_image_free };
+MRB_GLFW_EXTERN const struct mrb_data_type mrb_glfw3_image_type = { "GLFWimage", mrb_glfw3_image_free };
 
 static inline GLFWimage*
-get_image(mrb_state *mrb, mrb_value self)
+get_image(mrb_state* mrb, mrb_value self)
 {
   return (GLFWimage*)mrb_data_get_ptr(mrb, self, &mrb_glfw3_image_type);
 }
@@ -52,34 +53,36 @@ pixel_size()
 }
 
 static inline int
-calc_image_size(GLFWimage *image)
+calc_image_size(GLFWimage* image)
 {
   return image->width * image->height;
 }
 
 static inline int
-calc_image_pixels_size(GLFWimage *image)
+calc_image_pixels_size(GLFWimage* image)
 {
   return calc_image_size(image) * pixel_size();
 }
 
 static inline pixel_t*
-image_pixels(GLFWimage *image)
+image_pixels(GLFWimage* image)
 {
   return (pixel_t*)(&image->pixels[0]);
 }
 
 static mrb_value
-image_initialize(mrb_state *mrb, mrb_value self)
+image_initialize(mrb_state* mrb, mrb_value self)
 {
-  GLFWimage *image;
+  GLFWimage* image;
   mrb_int w;
   mrb_int h;
   int size;
   mrb_get_args(mrb, "ii", &w, &h);
+
   if (0 > w || 0 > h) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "Image dimensions are invalid!");
   }
+
   image = mrb_malloc(mrb, sizeof(GLFWimage));
   image->width = w;
   image->height = h;
@@ -92,33 +95,33 @@ image_initialize(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-image_get_memsize(mrb_state *mrb, mrb_value self)
+image_get_memsize(mrb_state* mrb, mrb_value self)
 {
   return mrb_fixnum_value(calc_image_pixels_size(get_image(mrb, self)));
 }
 
 static mrb_value
-image_get_pixelsize(mrb_state *mrb, mrb_value self)
+image_get_pixelsize(mrb_state* mrb, mrb_value self)
 {
   return mrb_fixnum_value(sizeof(pixel_t));
 }
 
 static mrb_value
-image_get_width(mrb_state *mrb, mrb_value self)
+image_get_width(mrb_state* mrb, mrb_value self)
 {
   return mrb_fixnum_value(get_image(mrb, self)->width);
 }
 
 static mrb_value
-image_get_height(mrb_state *mrb, mrb_value self)
+image_get_height(mrb_state* mrb, mrb_value self)
 {
   return mrb_fixnum_value(get_image(mrb, self)->height);
 }
 
 static mrb_value
-image_clear(mrb_state *mrb, mrb_value self)
+image_clear(mrb_state* mrb, mrb_value self)
 {
-  GLFWimage *image;
+  GLFWimage* image;
   mrb_value a;
   pixel_t pixel;
   mrb_get_args(mrb, "A", &a);
@@ -132,18 +135,20 @@ image_clear(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-image_aget(mrb_state *mrb, mrb_value self)
+image_aget(mrb_state* mrb, mrb_value self)
 {
-  GLFWimage *image;
+  GLFWimage* image;
   mrb_int x;
   mrb_int y;
   pixel_t pixel;
   mrb_value vals[4];
   mrb_get_args(mrb, "ii", &x, &y);
   image = get_image(mrb, self);
+
   if (x < 0 || image->width < x || y < 0 || image->height < y) {
     return mrb_glfw3_ary_of(mrb, 4, mrb_fixnum_value(0));
   }
+
   pixel = image_pixels(image)[x + y * image->width];
   vals[0] = mrb_fixnum_value(pixel.r);
   vals[1] = mrb_fixnum_value(pixel.g);
@@ -153,18 +158,20 @@ image_aget(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-image_aset(mrb_state *mrb, mrb_value self)
+image_aset(mrb_state* mrb, mrb_value self)
 {
-  GLFWimage *image;
+  GLFWimage* image;
   mrb_int x;
   mrb_int y;
-  pixel_t *pixels;
+  pixel_t* pixels;
   mrb_value val;
   mrb_get_args(mrb, "iiA", &x, &y, &val);
   image = get_image(mrb, self);
+
   if (x < 0 || image->width < x || y < 0 || image->height < y) {
     return mrb_nil_value();
   }
+
   pixels = &image_pixels(image)[x + y * image->width];
   pixels->r = mrb_int(mrb, mrb_ary_ref(mrb, val, 0)) & 0xFF;
   pixels->g = mrb_int(mrb, mrb_ary_ref(mrb, val, 1)) & 0xFF;
@@ -173,8 +180,8 @@ image_aset(mrb_state *mrb, mrb_value self)
   return mrb_nil_value();
 }
 
-void
-mrb_glfw3_image_init(mrb_state *mrb, struct RClass *mod)
+MRB_GLFW_EXTERN void
+mrb_glfw3_image_init(mrb_state* mrb, struct RClass* mod)
 {
   mrb_glfw3_image_class = mrb_define_class_under(mrb, mod, "Image", mrb->object_class);
   MRB_SET_INSTANCE_TT(mrb_glfw3_image_class, MRB_TT_DATA);
